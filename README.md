@@ -1,14 +1,11 @@
-======================================
 The InterMine Python Webservice Client
-======================================
+=====================================
 
---------------------------------------------
-An implementation of a webservice client 
-for InterMine webservices, written in Python
---------------------------------------------
+> An implementation of a webservice client 
+> for InterMine webservices, written in Python
 
 Who should use this software?
-=============================
+-----------------------------
 
 This software is intended for people who make 
 use of InterMine datawarehouses (ie. Biologists)
@@ -23,7 +20,7 @@ a compatible webservice API are:
   * YeastMine
 
 Installation:
-============
+-------------
 
 Put some info here about installation...
 
