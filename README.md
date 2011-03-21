@@ -13,11 +13,11 @@ and who want a quicker, more automated way
 to perform queries. Some examples of sites that
 are powered by InterMine software, and thus offer
 a compatible webservice API are:
-  * FlyMine
-  * MetabolicMine
-  * modMine
-  * RatMine
-  * YeastMine
+* FlyMine
+* MetabolicMine
+* modMine
+* RatMine
+* YeastMine
 
 Installation:
 -------------
