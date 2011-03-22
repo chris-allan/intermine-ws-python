@@ -54,7 +54,6 @@ class Service(object):
     def model(self):
         if self._model is None:
             model_url = self.root + self.MODEL_PATH
-            print "Model url: ", model_url
             self._model = Model(model_url)
         return self._model
 
@@ -74,9 +73,7 @@ class ResultIterator(object):
     def __init__(self, root, path, params, rowformat, view):
         params.update({"format" : "csv"})
         u = root + path
-        print "Going to open url: ", u
         p = urlencode(params)
-        print "My params are: ", p
         u += "?" + p
         con = urlopen(u)
         self.reader = {

@@ -5,8 +5,6 @@ from intermine.pathfeatures import PathFeature, PATH_PATTERN
 class Constraint(PathFeature):
     child_type = "constraint"
 
-    def __repr__(self):
-
 class LogicNode(object):
     def __and__(self, other):
         if not isinstance(other, LogicNode):
@@ -77,7 +75,7 @@ class TernaryConstraint(BinaryConstraint):
         if self.extra_value is None:
             return s
         else:
-            return " ".join([s, self.extra_value])
+            return " ".join([s, 'IN', self.extra_value])
     def to_dict(self):
         d = super(TernaryConstraint, self).to_dict()
         if self.extra_value is not None:
