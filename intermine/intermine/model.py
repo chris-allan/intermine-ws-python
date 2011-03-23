@@ -34,15 +34,15 @@ class Class(object):
         if name in self.field_dict:
             return self.field_dict[name]
         else:
-            raise PathError("There is no field called %s in %s" % (name, self.name))
+            raise ModelError("There is no field called %s in %s" % (name, self.name))
 
     def isa(self, other):
         """Check if self is, or inherits from other"""
-        if instance_of(other, Class):
+        if isinstance(other, Class):
             other_name = other.name
         else:
             other_name = other
-        if self.name == other.name:
+        if self.name == other_name:
             return True
         if other_name in self.parents:
             return True
@@ -60,6 +60,7 @@ class Field(object):
         self.declared_in = c
     def toString(self):
         return self.name + " is a " + self.type_name
+
 
 class Attribute(Field):
     pass
@@ -79,6 +80,35 @@ class Reference(Field):
 class Collection(Reference):
     pass
 
+class Path(object):
+    def __init__(self, path_string, model, subclasses={}):
+        self._string = path_string
+        self.parts = model.parse_path_string(path_string, subclasses)
+
+    def __str__(self):
+        return self._string
+
+    def __repr__(self):
+        return '<' + self.__class__.__name__ + ": " + self._string + '>'
+
+    @property
+    def end(self):
+        return self.parts[-1]
+
+    def get_class(self):
+        if self.is_class():
+            return self.end
+        elif self.is_reference():
+            return self.end.type_class
+        else:
+            return None
+    
+    def is_reference(self):
+        return isinstance(self.end, Reference)
+
+    def is_class(self):
+        return isinstance(self.end, Class)
+
 class Model(object):
     """a class for representing the data model of an InterMine
     
@@ -93,41 +123,45 @@ class Model(object):
         self.vivify()
 
     def parse_model(self, source):
-        """Create classes, attributes, references and collections from the model.xml"""
-        io = openAnything(source)
-        doc = minidom.parse(io)
-        for node in doc.getElementsByTagName('model'):
-            self.name = node.getAttribute('name')
-            self.package_name = node.getAttribute('package')
-            assert node.nextSibling is None, "More than one model element"
-            assert self.name and self.package_name, "No model name or package name"
-
-        for c in doc.getElementsByTagName('class'):
-            class_name = c.getAttribute('name')
-            assert class_name, "Name not defined in" + c.toxml()
-            def strip_java_prefix(x): 
-                return re.sub(r'.*\.', '', x)
-            parents = map(strip_java_prefix, 
-                    c.getAttribute('extends').split(' '))
-            cl =  Class(class_name, parents)
-            for a in c.getElementsByTagName('attribute'):
-                name = a.getAttribute('name')
-                type_name = strip_java_prefix(a.getAttribute('type'))
-                at = Attribute(name, type_name, cl)
-                cl.field_dict[name] = at
-            for r in c.getElementsByTagName('reference'):
-                name = r.getAttribute('name')
-                type_name = r.getAttribute('referenced-type')
-                linked_field_name = r.getAttribute('reverse-reference')
-                ref = Reference(name, type_name, cl, linked_field_name)
-                cl.field_dict[name] = ref
-            for co in c.getElementsByTagName('collection'):
-                name = co.getAttribute('name')
-                type_name = co.getAttribute('referenced-type')
-                linked_field_name = co.getAttribute('reverse-reference')
-                col = Collection(name, type_name, cl, linked_field_name)
-                cl.field_dict[name] = col
-            self.classes[class_name] = cl
+        """Create classes, attributes, references and collections from the model.xml
+           The xml can be provided as a file, url or string"""
+        try:
+            io = openAnything(source)
+            doc = minidom.parse(io)
+            for node in doc.getElementsByTagName('model'):
+                self.name = node.getAttribute('name')
+                self.package_name = node.getAttribute('package')
+                assert node.nextSibling is None, "More than one model element"
+                assert self.name and self.package_name, "No model name or package name"
+     
+            for c in doc.getElementsByTagName('class'):
+                class_name = c.getAttribute('name')
+                assert class_name, "Name not defined in" + c.toxml()
+                def strip_java_prefix(x): 
+                    return re.sub(r'.*\.', '', x)
+                parents = map(strip_java_prefix, 
+                        c.getAttribute('extends').split(' '))
+                cl =  Class(class_name, parents)
+                for a in c.getElementsByTagName('attribute'):
+                    name = a.getAttribute('name')
+                    type_name = strip_java_prefix(a.getAttribute('type'))
+                    at = Attribute(name, type_name, cl)
+                    cl.field_dict[name] = at
+                for r in c.getElementsByTagName('reference'):
+                    name = r.getAttribute('name')
+                    type_name = r.getAttribute('referenced-type')
+                    linked_field_name = r.getAttribute('reverse-reference')
+                    ref = Reference(name, type_name, cl, linked_field_name)
+                    cl.field_dict[name] = ref
+                for co in c.getElementsByTagName('collection'):
+                    name = co.getAttribute('name')
+                    type_name = co.getAttribute('referenced-type')
+                    linked_field_name = co.getAttribute('reverse-reference')
+                    col = Collection(name, type_name, cl, linked_field_name)
+                    cl.field_dict[name] = col
+                self.classes[class_name] = cl
+        except Exception, error:
+            raise ModelParseError(error.message)
 
     def vivify(self):
         """make names point to instances and insert inherited fields"""
@@ -156,18 +190,27 @@ class Model(object):
 
     def get_class(self, name):
         """Get a class by its name"""
+        if name.find(".") != -1:
+            end = self.parse_path_string(name).pop()
+            if isinstance(end, Class):
+                name = end.name
+            else: 
+                name = end.type_name
         if name in self.classes:
           return self.classes[name]
         else:
-          raise PathError("'" + name + "' is not a valid class name for this model")
+          raise ModelError("'" + name + "' is not a class in this model")
 
-    def validate_path(self, path_string, subclasses):
+    def make_path(self, path, subclasses={}):
+        return Path(path, self, subclasses)
+
+    def validate_path(self, path_string, subclasses={}):
         """Validate a path"""
         try:
             self.parse_path_string(path_string, subclasses)
             return True
-        except PathError, e:
-            raise PathError("Error parsing '%s' (subclasses: %s)" 
+        except PathParseError, e:
+            raise PathParseError("Error parsing '%s' (subclasses: %s)" 
                             % ( path_string, str(subclasses) ), e )
 
     def parse_path_string(self, path_string, subclasses={}):
@@ -198,7 +241,13 @@ class Model(object):
      
         return descriptors 
 
-class PathError(Exception):
+class ModelError(Exception):
+    pass
+
+class PathParseError(ModelError):
+    pass
+
+class ModelParseError(ModelError):
     pass
 
 #xmlfile = "/home/alex/svn/dev/testmodel/dbmodel/build/model/testmodel_model.xml"

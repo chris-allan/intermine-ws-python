@@ -19,16 +19,21 @@ class PathFeature(object):
 
 class Join(PathFeature):
     valid_join_styles = ['OUTER', 'INNER']
+    INNER = "INNER"
+    OUTER = "OUTER"
     child_type = 'join'
     def __init__(self, path, style='OUTER'):
-        if not style.uc in valid_join_styles:
+        if style.upper() not in Join.valid_join_styles:
             raise TypeError("Unknown join style: " + style)
-        self.style = style
+        self.style = style.upper()
         super(Join, self).__init__(path)
     def to_dict(self):
         d = super(Join, self).to_dict()
         d.update(style=self.style)
         return d
+    def __repr__(self):
+        return('<' + self.__class__.__name__ 
+                + ' '.join([':', self.path, self.style]) + '>')
 
 class PathDescription(PathFeature):
     child_type = 'pathDescription'

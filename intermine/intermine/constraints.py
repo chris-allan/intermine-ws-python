@@ -30,12 +30,11 @@ class LogicGroup(LogicNode):
 
 class CodedConstraint(Constraint, LogicNode):
     OPS = set([])
-    _codes = iter(string.ascii_uppercase)
     def __init__(self, path, op):
         if op not in self.OPS:
             raise TypeError(op + " not in " + str(self.OPS))
         self.op = op
-        self.code = self._codes.next()
+        self.code = 'A'
         super(CodedConstraint, self).__init__(path)
     def __str__(self):
         return self.code
@@ -106,21 +105,12 @@ class SubClassConstraint(Constraint):
        super(SubClassConstraint, self).__init__(path)
     def to_string(self):
        s = super(SubClassConstraint, self).to_string()
-       return s + ' ASA ' + self.subclass
+       return s + ' ISA ' + self.subclass
     def to_dict(self):
        d = super(SubClassConstraint, self).to_dict()
        d.update(type=self.subclass) 
        return d
 
-CONSTRAINT_CLASSES = set([UnaryConstraint, BinaryConstraint, TernaryConstraint, MultiConstraint, SubClassConstraint])
-
-def make_constraint(*args, **kwargs):
-    for CC in CONSTRAINT_CLASSES:
-        try:
-            return CC(*args, **kwargs)
-        except TypeError:
-            pass
-    raise TypeError("No matching constraint class found")
 
 class TemplateConstraint(object):
     REQUIRED = "locked"
@@ -188,17 +178,32 @@ class TemplateSubClassConstraint(
             del d[i]
         TemplateConstraint.__init__(self, **d)
 
-TEMPLATE_CONSTRAINT_CLASSES = set([
-    TemplateUnaryConstraint, TemplateBinaryConstraint, 
-    TemplateTernaryConstraint, TemplateMultiConstraint,
-    TemplateSubClassConstraint,
+class ConstraintFactory(object):
+
+    CONSTRAINT_CLASSES = set([
+        UnaryConstraint, BinaryConstraint, TernaryConstraint, 
+        MultiConstraint, SubClassConstraint])
+
+    def __init__(self):
+        self._codes = iter(string.ascii_uppercase)
+    
+    def get_next_code(self):
+        return self._codes.next()
+
+    def make_constraint(self, *args, **kwargs):
+        for CC in self.CONSTRAINT_CLASSES:
+            try:
+                c = CC(*args, **kwargs)
+                c.code = self.get_next_code()
+                return c
+            except TypeError:
+                pass
+        raise TypeError("No matching constraint class found for " 
+            + str(args) + ", " + str(kwargs))
+    
+class TemplateConstraintFactory(ConstraintFactory):
+    CONSTRAINT_CLASSES = set([
+        TemplateUnaryConstraint, TemplateBinaryConstraint, 
+        TemplateTernaryConstraint, TemplateMultiConstraint,
+        TemplateSubClassConstraint,
     ])
-
-def make_template_constraint(*args, **kwargs):
-    for CC in TEMPLATE_CONSTRAINT_CLASSES:
-        try:
-            return CC(*args, **kwargs)
-        except TypeError:
-            pass
-    raise TypeError("No matching template constraint class found")
-

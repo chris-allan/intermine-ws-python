@@ -1,6 +1,6 @@
 import re
 from xml.dom.minidom import getDOMImplementation
-from intermine.constraints import make_constraint, make_template_constraint, SubClassConstraint
+from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint
 from intermine.pathfeatures import PathDescription, Join
 
 class QueryError(Exception):
@@ -21,6 +21,7 @@ class Query(object):
         self.views = []
         self._sort_order = None
         self.joins = []
+        self.constraint_factory = ConstraintFactory()
 
     @classmethod
     def from_xml(cls, xml, *args, **kwargs):
@@ -76,16 +77,22 @@ class Query(object):
         self.views.extend(views)
 
     def add_constraint(self, *args, **kwargs):
-        con = make_constraint(*args, **kwargs)
+        con = self.constraint_factory.make_constraint(*args, **kwargs)
         if self.do_verification:
-            self.model.validate_path(con.path, self.get_subclass_dict())
+            pathA = self.model.make_path(con.path, self.get_subclass_dict())
+            if hasattr(con, 'subclass'):
+                pathB = self.model.make_path(con.subclass, self.get_subclass_dict())
+                if not pathB.get_class().isa(pathA.get_class()):
+                    raise ConstraintError("'" + con.subclass + "' is not a subclass of '" + con.path + "'")
         self.constraints.append(con)
         return con
         
     def add_join(self, *args ,**kwargs):
         join = Join(*args, **kwargs)
         if self.do_verification:
-            self.model.validate_path(join.path, self.get_subclass_dict())
+            path = self.model.make_path(join.path, self.get_subclass_dict())
+            if not path.is_reference():
+                raise ConstraintError("'" + join.path + "' is not a reference")
         self.joins.append(join)
         return join
 
@@ -184,10 +191,7 @@ class Template(Query):
     def __init__(self, *args, **kwargs):
         super(Template, self).__init__(*args, **kwargs)
         self.title 
-    def add_constraint(self, *args, **kwargs):
-        con = make_template_constraint(*args, **kwargs)
-        self.constraints.append(con)
-        return con
+        self.constraint_factory = TemplateConstraintFactory()
     @property
     def editable_constraints(self):
         isEditable = lambda x: x.editable
@@ -205,6 +209,11 @@ class Template(Query):
     def results(self, **args):
         pass
 
+class QueryError(Exception):
+    pass
+
+class ConstraintError(Exception):
+    pass
 
             
 

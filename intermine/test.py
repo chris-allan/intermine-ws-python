@@ -1,7 +1,7 @@
 import threading
-from intermine.model import Model
+from intermine.model import Model, ModelError
 from intermine.service import Service
-from intermine.query import Query
+from intermine.query import Query, ConstraintError
 import SimpleHTTPServer
 
 import unittest
@@ -58,6 +58,12 @@ class TestQuery(unittest.TestCase):
             "Employee.department.manager.name", "Employee.department.company.CEO.name"]
         self.assertEqual(q.views, expected)
 
+    def testConstraintProblems(self):
+        q = Query(self.m)
+        with self.assertRaises(ModelError) as context:
+            q.add_constraint('Foo', 'IS NULL')
+        self.assertEqual(context.exception.message, "'Foo' is not a class in this model")
+
     def testUnaryConstraints(self):
         q = Query(self.m)
         q.add_constraint('Employee.age', 'IS NULL')
@@ -86,6 +92,49 @@ class TestQuery(unittest.TestCase):
         q.add_constraint('Manager.name', 'NONE OF', ['Sue', 'Jane', 'Helen'])
         expected = "[<MultiConstraint: Employee.name ONE OF ['Tom', 'Dick', 'Harry']>, <MultiConstraint: Manager.name NONE OF ['Sue', 'Jane', 'Helen']>]"
         self.assertEqual(q.constraints.__repr__(), expected)
+
+    def testSubclassConstraints(self):
+        q = Query(self.m)
+        q.add_constraint('Department.employees', 'Manager')
+        expected = "[<SubClassConstraint: Department.employees ISA Manager>]"
+        self.assertEqual(q.constraints.__repr__(), expected)
+        with self.assertRaises(ModelError) as context:
+            q.add_constraint('Department.company.CEO', 'Foo')
+        self.assertEqual(
+            context.exception.message, 
+            "'Foo' is not a class in this model")
+        with self.assertRaises(ConstraintError) as context:
+            q.add_constraint('Department.company.CEO', 'Manager')
+        self.assertEqual(
+            context.exception.message, 
+            "'Manager' is not a subclass of 'Department.company.CEO'")
+
+    def testJoins(self):
+        q = Query(self.m)
+        with self.assertRaises(TypeError) as context:
+            q.add_join('Employee.department', 'foo')
+        self.assertEqual(context.exception.message, "Unknown join style: foo")
+        with self.assertRaises(ConstraintError) as context:
+            q.add_join('Employee.age', 'inner')
+        self.assertEqual(context.exception.message, 
+            "'Employee.age' is not a reference")
+        q.add_join('Employee.department', 'inner')
+        q.add_join('Employee.department.company', 'outer')
+        expected = "[<Join: Employee.department INNER>, <Join: Employee.department.company OUTER>]"
+        self.assertEqual(expected, q.joins.__repr__())
+
+    def testXML(self):
+        q = Query(self.m)
+        q.add_view("Employee.name", "Employee.age", "Employee.department")
+        q.add_constraint("Employee.name", "IS NOT NULL")
+        q.add_constraint("Employee.age", ">", 10)
+        q.add_constraint("Employee.department", "LOOKUP", "Sales", "Wernham-Hogg")
+        q.add_constraint("Employee.department.employees.name", "ONE OF", 
+            ["John", "Paul", "Mary"])
+        q.add_constraint("Employee.department.employees", "Manager")
+        q.add_join("Employee.department", "outer")
+        expected = '<query comment="" longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.department"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
+        self.assertEqual(expected, q.to_xml())
 
 class TestQueryResults(unittest.TestCase):
     
@@ -118,37 +167,3 @@ if __name__ == '__main__':
     server = ServerThread()
     server.start()
     unittest.main()
-                
-
-#       print "Service root: ", s.root
-#       q = s.new_query()
-#
-#       #m = Model('http://www.flymine.org/query/service/model')
-#       #q = Query(m)
-#
-#       q.name = 'Foo'
-#       q.description = 'a query made out of pythons'
-#       q.add_view("Gene.name Gene.symbol")
-#       q.add_constraint('Gene', 'LOOKUP', 'eve')
-#       q.add_constraint('Gene.length', '>', 50000)
-#       q.add_constraint('Gene', 'Clone')
-#       q.add_constraint('Gene.symbol', 'ONE OF', ['eve', 'zen'])
-#       q.add_join('Gene.alleles')
-#       q.add_path_description('Gene', 'One of those gene-y things')
-#       print q.to_xml()
-#       print q.to_formatted_xml()
-#       print q.to_query_params()
-#
-#       q = s.new_query()
-#       q.add_view("Gene.name", "Gene.organism.name", "Gene.pathways.name")
-#
-#       it = q.get_results_iterator("string")
-#
-#       print "ITERATOR: ", it
-#
-#       for line in it:
-#           print line
-#       #finally:
-#       #    server.stop()
-#
-#       exit()
