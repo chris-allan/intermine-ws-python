@@ -2,6 +2,7 @@ import re
 from xml.dom.minidom import getDOMImplementation
 from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint
 from intermine.pathfeatures import PathDescription, Join
+from copy import deepcopy
 
 class QueryError(Exception):
     pass
@@ -17,10 +18,10 @@ class Query(object):
         self.do_verification = validate
         self.path_descriptions = []
         self.joins = []
-        self.constraints = []
+        self.constraint_dict = {}
         self.views = []
         self._sort_order = None
-        self.joins = []
+        self._logic = None
         self.constraint_factory = ConstraintFactory()
 
     @classmethod
@@ -84,8 +85,19 @@ class Query(object):
                 pathB = self.model.make_path(con.subclass, self.get_subclass_dict())
                 if not pathB.get_class().isa(pathA.get_class()):
                     raise ConstraintError("'" + con.subclass + "' is not a subclass of '" + con.path + "'")
-        self.constraints.append(con)
+        self.constraint_dict[con.code] = con
         return con
+
+    @property
+    def constraints(self):
+        return sorted(self.constraint_dict.values(), key=lambda con: con.code)
+
+    def get_constraint(self, code):
+        try: 
+            return self.constraint_dict[code]
+        except KeyError:
+            raise ConstraintError("There is no constraint with the code '"  
+                                    + code + "' on this query")
         
     def add_join(self, *args ,**kwargs):
         join = Join(*args, **kwargs)
@@ -134,10 +146,13 @@ class Query(object):
         return subclass_dict
 
     def results(self, row="list"):
-        path = self.service.QUERY_PATH
+        path = self.get_results_path()
         params = self.to_query_params()
         view = self.views
         return self.service.get_results(path, params, row, view)
+
+    def get_results_path(self):
+        return self.service.QUERY_PATH
 
     def get_results_iterator(self, rowformat="list"):
         return self.service.get_results_iterator(
@@ -187,10 +202,18 @@ class Query(object):
         n = self.to_Node()
         return n.toprettyxml()
 
+    def clone(self):
+        newobj = self.__class__(self.model)
+        for attr in ["joins", "views", "_sort_order", "_logic", "path_descriptions", "constraint_dict"]:
+            setattr(newobj, attr, deepcopy(getattr(self, attr)))
+
+        for attr in ["name", "description", "comment", "service", "do_verification", "constraint_factory"]:
+            setattr(newobj, attr, getattr(self, attr))
+        return newobj
+
 class Template(Query):
     def __init__(self, *args, **kwargs):
         super(Template, self).__init__(*args, **kwargs)
-        self.title 
         self.constraint_factory = TemplateConstraintFactory()
     @property
     def editable_constraints(self):
@@ -202,12 +225,25 @@ class Template(Query):
         for c in self.editable_constraints:
             if not c.switched_on:
 		next
-            for k, v in c.toDict:
-                p[k + i] = v
+            for k, v in c.to_dict().items():
+                p[k + str(i)] = v
             i += 1
         return p
-    def results(self, **args):
-        pass
+
+    def get_results_path(self):
+        return self.service.TEMPLATEQUERY_PATH
+
+    def results(self, row="list", **con_values):
+        clone = self.clone()
+        for code, options in con_values.items():
+            con = clone.get_constraint(code)
+            if not con.editable:
+                raise ConstraintError("There is a constraint '" + code 
+                                       + "' on this query, but it is not editable")
+            for key, value in options.items():
+                setattr(con, key, value)
+        return super(Template, clone).results(row)
+            
 
 class QueryError(Exception):
     pass

@@ -61,7 +61,6 @@ class Service(object):
         return Query(self.model, self)
 
     def get_results_iterator(self, path, params, row, view):
-        params.update({"format" : "csv"})
         return ResultIterator(self.root, path, params, row, view)
 
     def get_results(self, path, params, row, view):

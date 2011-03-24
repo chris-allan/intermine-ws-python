@@ -52,15 +52,15 @@ class UnaryConstraint(CodedConstraint):
 class BinaryConstraint(CodedConstraint):
     OPS = set(['=', '!=', '<', '>', '<=', '>='])
     def __init__(self, path, op, value):
-        self.value = str(value)
+        self.value = value
         super(BinaryConstraint, self).__init__(path, op)
 
     def to_string(self):
         s = super(BinaryConstraint, self).to_string()
-        return " ".join([s, self.value])
+        return " ".join([s, str(self.value)])
     def to_dict(self):
         d = super(BinaryConstraint, self).to_dict()
-        d.update(value=self.value)
+        d.update(value=str(self.value))
         return d
     
 class TernaryConstraint(BinaryConstraint):
@@ -113,70 +113,82 @@ class SubClassConstraint(Constraint):
 
 
 class TemplateConstraint(object):
-    REQUIRED = "locked"
+    REQUIRED = "required"
     OPTIONAL_ON = "on"
     OPTIONAL_OFF = "off"
-    def __init__(self, editable=True, optional=REQUIRED):
+    def __init__(self, editable=True, optional="required"):
         self.editable = editable
-        if optional == REQUIRED:
+        if optional == TemplateConstraint.REQUIRED:
             self.optional = False
             self.switched_on = True
         else:
             self.optional = True
-            if optional == OPTIONAL_ON:
+            if optional == TemplateConstraint.OPTIONAL_ON:
                 self.switched_on = True
-            elif optional == OPTIONAL_OFF:
+            elif optional == TemplateConstraint.OPTIONAL_OFF:
                 self.switched_on = False
             else:
                 raise TypeError("Bad value for optional")
-    def to_dict(self):
-        d = {'editable' : self.editable }
+    def get_switchable_status(self):
         if not self.optional:
-            d[switchable] = "locked"
+            return "locked"
         else:
-            if self.switched_on:
-                d[switchable] = "on"
-            else:
-                d[switchable] = "off"
+            switch = "on" if self.switched_on else "off"
+            return switch
+
+    def to_string(self):
+        editable = "editable" if self.editable else "non-editable"
+        return '(' + editable + ", " + self.get_switchable_status() + ')'
 
 class TemplateUnaryConstraint(UnaryConstraint, TemplateConstraint):
-    def __init__(self, **d):
-        UnaryConstraint.__init__(self, d[path], d[op])
+    def __init__(self, *a, **d):
+        UnaryConstraint.__init__(self, *a, **d)
     	for i in ["path", "op"]:
-	        del d[i]
+	        if i in d: del d[i]
         TemplateConstraint.__init__(self, **d)
+    def to_string(self):
+        return(UnaryConstraint.to_string(self) 
+                + " " + TemplateConstraint.to_string(self))
 
 class TemplateBinaryConstraint(BinaryConstraint, TemplateConstraint):
-    def __init__(self, **d):
-        BinaryConstraint.__init__(self, 
-                d[path], d[op], d[value])
+    def __init__(self, *a, **d):
+        BinaryConstraint.__init__(self, *a, **d)
         for i in ["path", "op", "value"]:
-            del d[i]
+            if i in d: del d[i]
         TemplateConstraint.__init__(self, **d)
+    def to_string(self):
+        return(BinaryConstraint.to_string(self) 
+                + " " + TemplateConstraint.to_string(self))
 
 class TemplateTernaryConstraint(TernaryConstraint, TemplateConstraint):
-    def __init__(self, **d):
-        TernaryConstraint.__init__(self, 
-                d[path], d[op], d[value])
+    def __init__(self, *a, **d):
+        TernaryConstraint.__init__(self, *a, **d)
         for i in ["path", "op", "value"]:
-            del d[i]
+            if i in d: del d[i]
         TemplateConstraint.__init__(self, **d)
+    def to_string(self):
+        return(TernaryConstraint.to_string(self) 
+                + " " + TemplateConstraint.to_string(self))
 
 class TemplateMultiConstraint(MultiConstraint, TemplateConstraint):
-    def __init__(self, **d):
-        MultiConstraint.__init__(self, 
-                d[path], d[op], d[values])
+    def __init__(self, *a, **d):
+        MultiConstraint.__init__(self, *a, **d)
         for i in ["path", "op", "values"]:
-            del d[i]
+            if i in d: del d[i]
         TemplateConstraint.__init__(self, **d)
+    def to_string(self):
+        return(MultiConstraint.to_string(self) 
+                + " " + TemplateConstraint.to_string(self))
 
-class TemplateSubClassConstraint(
-        SubClassConstraint, TemplateConstraint):
-    def __init__(self, **d):
-        SubClassConstraint.__init__(self, d[path], d[subclass])
+class TemplateSubClassConstraint(SubClassConstraint, TemplateConstraint):
+    def __init__(self, *a, **d):
+        SubClassConstraint.__init__(self, *a, **d)
         for i in ["path", "subclass"]:
-            del d[i]
+            if i in d: del d[i]
         TemplateConstraint.__init__(self, **d)
+    def to_string(self):
+        return(SubClassConstraint.to_string(self) 
+                + " " + TemplateConstraint.to_string(self))
 
 class ConstraintFactory(object):
 
