@@ -50,7 +50,7 @@ class UnaryConstraint(CodedConstraint):
     OPS = set(['IS NULL', 'IS NOT NULL'])
 
 class BinaryConstraint(CodedConstraint):
-    OPS = set(['=', '!=', '<', '>', '<=', '>=', 'LIKE'])
+    OPS = set(['=', '!=', '<', '>', '<=', '>=', 'LIKE', 'NOT LIKE'])
     def __init__(self, path, op, value, code="A"):
         self.value = value
         super(BinaryConstraint, self).__init__(path, op, code)
@@ -61,6 +61,20 @@ class BinaryConstraint(CodedConstraint):
     def to_dict(self):
         d = super(BinaryConstraint, self).to_dict()
         d.update(value=str(self.value))
+        return d
+
+class ListConstraint(CodedConstraint):
+    OPS = set(['IN', 'NOT IN'])
+    def __init__(self, path, op, list_name, code="A"):
+        self.list_name = list_name
+        super(BinaryConstraint, self).__init__(path, op, code)
+
+    def to_string(self):
+        s = super(ListConstraint, self).to_string()
+        return " ".join([s, str(self.list_name)])
+    def to_dict(self):
+        d = super(ListConstraint, self).to_dict()
+        d.update(value=str(self.list_name))
         return d
 
 class LoopConstraint(CodedConstraint):
