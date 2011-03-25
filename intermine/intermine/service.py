@@ -36,7 +36,16 @@ class Service(object):
         return self._release
 
     def get_template(self, name):
-        return self.templates[name]
+        try:
+            t = self.templates[name]
+        except KeyError:
+            raise ServiceError("There is no template called '" 
+                + name + "' at this service")
+        if not isinstance(t, Template):
+            t = Template.from_xml(t, self.model, self)
+            self.templates[name] = t
+        return t 
+
     @property
     def templates(self):
         if self._templates is None:
@@ -46,11 +55,10 @@ class Service(object):
             templates = {}
             for e in dom.getElementsByTagName('template'):
                 name = e.getAttribute('name')
-                temp = Template.from_xml(e.toxml(), self.model, self)
                 if name in templates:
                     raise ServiceError("Two templates with same name: " + name)
                 else:
-                    templates[name] = temp
+                    templates[name] = e.toxml()
             self._templates = templates
         return self._templates
 
@@ -90,3 +98,6 @@ class ResultIterator(object):
 
     def next(self):
         return self.reader.next()
+
+class ServiceError(Exception):
+    pass

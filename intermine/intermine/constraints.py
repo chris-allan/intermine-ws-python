@@ -127,10 +127,10 @@ class SubClassConstraint(Constraint):
 
 
 class TemplateConstraint(object):
-    REQUIRED = "required"
+    REQUIRED = "locked"
     OPTIONAL_ON = "on"
     OPTIONAL_OFF = "off"
-    def __init__(self, editable=True, optional="required"):
+    def __init__(self, editable=True, optional="locked"):
         self.editable = editable
         if optional == TemplateConstraint.REQUIRED:
             self.optional = False
@@ -143,6 +143,15 @@ class TemplateConstraint(object):
                 self.switched_on = False
             else:
                 raise TypeError("Bad value for optional")
+
+    @property
+    def required(self):
+        return not self.optional
+
+    @property
+    def switched_off(self):
+        return not self.switched_on
+
     def get_switchable_status(self):
         if not self.optional:
             return "locked"

@@ -1,6 +1,6 @@
 import threading
 from intermine.model import Model, ModelError
-from intermine.service import Service
+from intermine.service import Service, ServiceError
 from intermine.query import Query, Template, ConstraintError
 import SimpleHTTPServer
 
@@ -199,8 +199,8 @@ class TestQueryResults(unittest.TestCase):
              'name': 'TEST-TEMPLATE', 
              'code1': 'A', 
              'code2': 'B', 
-             'path1': 'Employee.name', 
-             'path2': 'Employee.age', 
+             'constraint1': 'Employee.name', 
+             'constraint2': 'Employee.age', 
              'op1': '=',
              'op2': '>', 
              'value1': 'Fred', 
@@ -216,8 +216,8 @@ class TestQueryResults(unittest.TestCase):
              'name': 'TEST-TEMPLATE', 
              'code1': 'A', 
              'code2': 'B', 
-             'path1': 'Employee.name', 
-             'path2': 'Employee.age', 
+             'constraint1': 'Employee.name', 
+             'constraint2': 'Employee.age', 
              'op1': '<',
              'op2': '>', 
              'value1': 'Tom', 
@@ -252,6 +252,42 @@ class TestQueryResults(unittest.TestCase):
             ]
         self.assertEqual(self.query.results("string"), expected)
         self.assertEqual(self.template.results("string"), expected)
+
+class TestTemplates(unittest.TestCase):
+
+    def setUp(self):
+        self.service = Service("http://localhost:8000/test/service")
+
+    def testGetTemplate(self):
+        self.assertEqual(len(self.service.templates), 12)
+        t = self.service.get_template("MultiValueConstraints")
+        self.assertTrue(isinstance(t, Template))
+        expected = "[<TemplateMultiConstraint: Employee.name ONE OF [u'Dick', u'Jane', u'Timmy, the Loyal German-Shepherd'] (editable, locked)>]"
+        self.assertEqual(t.editable_constraints.__repr__(), expected)
+        expected = [['foo', 'bar', 'baz'],['quux','fizz','fop']]
+        self.assertEqual(t.results(), expected)
+        with self.assertRaises(ServiceError) as context:
+            self.service.get_template("Non_Existant")
+        self.assertEqual(
+            "There is no template called 'Non_Existant' at this service", 
+            context.exception.message)
+    
+    def testTemplateConstraintParsing(self):
+        t = self.service.get_template("UneditableConstraints")
+        self.assertEqual(len(t.constraints), 2)
+        self.assertEqual(len(t.editable_constraints), 1)
+        expected = '[<TemplateBinaryConstraint: Company.name = Woolies (editable, locked)>]'
+        self.assertEqual(expected, t.editable_constraints.__repr__())
+
+        t2 = self.service.get_template("SwitchableConstraints")
+        self.assertEqual(len(t2.editable_constraints), 3)
+        con = t2.get_constraint("A")
+        self.assertTrue(con.editable and con.required and con.switched_on)
+        con = t2.get_constraint("B")
+        self.assertTrue(con.editable and con.optional and con.switched_on)
+        con = t2.get_constraint("C")
+        self.assertTrue(con.editable and con.optional and con.switched_off)
+         
 
 if __name__ == '__main__':
     server = ServerThread()

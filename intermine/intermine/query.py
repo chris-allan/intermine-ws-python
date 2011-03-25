@@ -6,9 +6,6 @@ from intermine.util import openAnything
 from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint
 from intermine.pathfeatures import PathDescription, Join
 
-class QueryError(Exception):
-    pass
-
 class Query(object):
 
     def __init__(self, model, service=None, validate=True):
