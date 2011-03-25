@@ -1,11 +1,13 @@
 import re
 
-PATH_PATTERN = re.compile("^(?:\w+\.)*\w+$")
+PATTERN_STR = "^(?:\w+\.)*\w+$"
+PATH_PATTERN = re.compile(PATTERN_STR)
 
 class PathFeature(object):
     def __init__(self, path):
         if not PATH_PATTERN.match(path):
-            raise TypeError("Path does not match expected pattern" + re)
+            raise TypeError(
+                "Path '" + path + "' does not match expected pattern" + PATTERN_STR)
         self.path = path
     def __repr__(self):
         return "<" + self.__class__.__name__ + ": " + self.to_string() + ">"

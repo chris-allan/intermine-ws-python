@@ -1,7 +1,9 @@
 from urlparse import urlunsplit, urljoin
-from urllib import *
+from xml.dom import minidom
+from urllib import urlopen
+from urllib import urlencode 
 import csv
-from query import Query
+from query import Query, Template
 from model import Model
 
 class Service(object):
@@ -25,7 +27,7 @@ class Service(object):
     @property
     def version(self):
         if self._version is None:
-            self._version = urlopen(self.root + VERSION_PATH).read()
+            self._version = int(urlopen(self.root + self.VERSION_PATH).read())
         return self._version
     @property
     def release(self):
@@ -38,16 +40,18 @@ class Service(object):
     @property
     def templates(self):
         if self._templates is None:
-            sock = urlopen(self.root + TEMPLATES_PATH)
+            sock = urlopen(self.root + self.TEMPLATES_PATH)
             dom = minidom.parse(sock)
             sock.close()
+            templates = {}
             for e in dom.getElementsByTagName('template'):
                 name = e.getAttribute('name')
-                temp = Template(self.model, self, e.toxml())
-                if self._templates[name]:
-                    raise ServiceError("Two templates with same name")
+                temp = Template.from_xml(e.toxml(), self.model, self)
+                if name in templates:
+                    raise ServiceError("Two templates with same name: " + name)
                 else:
-                    self._templates[name] = temp
+                    templates[name] = temp
+            self._templates = templates
         return self._templates
 
     @property

@@ -64,6 +64,9 @@ class TestQuery(unittest.TestCase):
             "Employee.department.manager.name", "Employee.department.company.CEO.name", 
             "Employee.department.manager.name", "Employee.department.company.CEO.name"]
         self.assertEqual(self.q.views, expected)
+        with self.assertRaises(ConstraintError) as context:
+            self.q.add_view("Employee.name", "Employee.age", "Employee.department")
+        self.assertEqual("Employee.department does not represent an attribute", context.exception.message)
 
     def testConstraintProblems(self):
         with self.assertRaises(ModelError) as context:
@@ -119,7 +122,7 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected, self.q.joins.__repr__())
 
     def testXML(self):
-        self.q.add_view("Employee.name", "Employee.age", "Employee.department")
+        self.q.add_view("Employee.name", "Employee.age", "Employee.department.name")
         self.q.add_constraint("Employee.name", "IS NOT NULL")
         self.q.add_constraint("Employee.age", ">", 10)
         self.q.add_constraint("Employee.department", "LOOKUP", "Sales", "Wernham-Hogg")
@@ -127,7 +130,7 @@ class TestQuery(unittest.TestCase):
             ["John", "Paul", "Mary"])
         self.q.add_constraint("Employee.department.employees", "Manager")
         self.q.add_join("Employee.department", "outer")
-        expected = '<query comment="" longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.department"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
+        expected = '<query longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
         self.assertEqual(expected, self.q.to_xml())
 
 class TestTemplate(TestQuery):
@@ -183,7 +186,7 @@ class TestQueryResults(unittest.TestCase):
         expectedQ = (
             '/QUERY-PATH', 
             {
-                'query': '<query comment="" longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.id"><constraint code="A" op="=" path="Employee.name" value="Fred"/><constraint code="B" op="&gt;" path="Employee.age" value="25"/></query>'
+                'query': '<query longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.id"><constraint code="A" op="=" path="Employee.name" value="Fred"/><constraint code="B" op="&gt;" path="Employee.age" value="25"/></query>'
             }, 
             'list', 
             ['Employee.name', 'Employee.age', 'Employee.id']

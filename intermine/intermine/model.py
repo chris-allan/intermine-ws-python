@@ -109,6 +109,9 @@ class Path(object):
     def is_class(self):
         return isinstance(self.end, Class)
 
+    def is_attribute(self):
+        return isinstance(self.end, Attribute)
+
 class Model(object):
     """a class for representing the data model of an InterMine
     
