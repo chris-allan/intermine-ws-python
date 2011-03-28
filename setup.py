@@ -2,7 +2,7 @@ from distutils.core import setup
 setup(
         name = "intermine",
         packages = ["intermine"],
-        version = "0.94.00",
+        version = "0.96.00",
         description = "InterMine WebService client",
         author = "Alex Kalderimis",
         author_email = "dev@intermine.org",
@@ -25,8 +25,8 @@ setup(
 InterMine Webservice Client
 ----------------------------
 
-Provides access routines to query webservices implementing 
-InterMine datawarehouses.
+Provides access routines to datawarehouses powered 
+by InterMine technology.
 
 """,
 )
