@@ -1,12 +1,13 @@
 import threading
-from intermine.model import Model, ModelError, ModelParseError
-from intermine.webservice import Service, ServiceError
-from intermine.query import Query, Template, ConstraintError, QueryError
-from intermine.constraints import LogicParseError, BinaryConstraint, TernaryConstraint, LoopConstraint, SubClassConstraint
 import SimpleHTTPServer
 import time
-
 import unittest
+
+from intermine.model import *
+from intermine.webservice import *
+from intermine.query import *
+from intermine.constraints import *
+
 
 class ServerThread( threading.Thread ):
     def __init__(self):
@@ -18,7 +19,7 @@ class ServerThread( threading.Thread ):
 class TestInstantiation(unittest.TestCase): 
 
     def testMakeModel(self):
-        m = Model("http://localhost:8000/test/service/model")
+        m = Model("http://localhost:8000/intermine/testservice/service/model")
         self.assertTrue(isinstance(m, Model), "Can make a model")
         try:
             bad_m = Model("foo")
@@ -26,12 +27,62 @@ class TestInstantiation(unittest.TestCase):
             self.assertEqual(ex.message, "Error parsing model")
 
     def testMakeService(self):
-        s = Service("http://localhost:8000/test/service")
+        s = Service("http://localhost:8000/intermine/testservice/service")
         self.assertTrue(isinstance(s, Service), "Can make a service")
+
+class TestModel(unittest.TestCase):
+
+    model = None
+
+    def setUp(self):
+        if self.model is None: 
+            self.model = Model("http://localhost:8000/intermine/testservice/service/model")
+
+    def testModelClasses(self):
+        '''The model should have the correct number of classes'''
+        self.assertEqual(len(self.model.classes.items()), 19)
+        for good_class in ["Employee", "Company", "Department"]:
+            cd = self.model.get_class(good_class)
+            self.assertEqual(cd.name, good_class)
+        dep = self.model.get_class("Employee.department.company.CEO")
+        self.assertEqual(dep.name, "CEO") 
+        self.assertTrue(dep.isa("Employee"))
+        emp = self.model.get_class("Employee")
+        self.assertTrue(dep.isa(emp))
+
+        try:
+            self.model.get_class("Foo")
+        except ModelError as ex:
+            self.assertEqual(ex.message, 
+                    "'Foo' is not a class in this model")
+        try: 
+            self.model.get_class("Employee.name")
+        except ModelError as ex:
+            self.assertEqual(ex.message, "'Employee.name' is not a class")
+
+    def testClassFields(self):
+        '''The classes should have the correct fields'''
+        ceo = self.model.get_class("CEO")
+        for f in ["name", "age", "seniority", "address", "department"]:
+            fd = ceo.get_field(f)
+            self.assertEqual(fd.name, f)
+            self.assertTrue(isinstance(fd, Field))
+
+        try:
+            ceo.get_field("foo")
+        except ModelError as ex:
+            self.assertEqual(ex.message, 
+                "There is no field called foo in CEO")
+
+    def testFieldTypes(self):
+        dep = self.model.get_class("Department")
+        self.assertTrue(isinstance(dep.get_field("name"), Attribute))
+        self.assertTrue(isinstance(dep.get_field("employees"), Collection))
+        self.assertTrue(isinstance(dep.get_field("company"), Reference))
 
 class TestService(unittest.TestCase):
 
-    ROOT = "http://localhost:8000/test/service"
+    ROOT = "http://localhost:8000/intermine/testservice/service"
      
     def setUp(self):
         self.s = Service(TestService.ROOT)
@@ -55,7 +106,7 @@ class TestQuery(unittest.TestCase):
 
     def setUp(self):
         if self.model is None:
-            self.__class__.model = Model("http://localhost:8000/test/service/model") 
+            self.__class__.model = Model("http://localhost:8000/intermine/testservice/service/model") 
         self.q = Query(self.model)
 
     def testAddViews(self):
@@ -194,7 +245,7 @@ class TestTemplate(TestQuery):
 class TestQueryResults(unittest.TestCase):
 
     model = None
-    service = Service("http://localhost:8000/test/service")
+    service = Service("http://localhost:8000/intermine/testservice/service")
 
     class MockService(object):
         
@@ -207,7 +258,7 @@ class TestQueryResults(unittest.TestCase):
     
     def setUp(self):
         if self.model is None:
-            self.__class__.model = Model("http://localhost:8000/test/service/model") 
+            self.__class__.model = Model("http://localhost:8000/intermine/testservice/service/model") 
         q = Query(self.model, self.service)
         q.add_view("Employee.name", "Employee.age", "Employee.id")
         self.query = q
@@ -302,7 +353,7 @@ class TestQueryResults(unittest.TestCase):
 class TestTemplates(unittest.TestCase):
 
     def setUp(self):
-        self.service = Service("http://localhost:8000/test/service")
+        self.service = Service("http://localhost:8000/intermine/testservice/service")
 
     def testGetTemplate(self):
         self.assertEqual(len(self.service.templates), 12)
