@@ -3,33 +3,46 @@ from intermine.util import openAnything, ReadableException
 import re
 
 class Class(object):
-    def find_by(a, b):
-        return a 
+    """A class representing classes in the Data Model,
+    which is in turn an abstraction of a database table 
+    in the database schema.
+
+    Each class can have attributes (columns) of various types,
+    and can have references to other classes (tables), on either
+    a one-to-one (references) or one-to-many (collections) basis
+
+    Classes should not be instantiated by hand, but rather used
+    as part of the model they belong to.
+    """
     def __init__(self, name, parents):
         self.name = name
         self.parents = parents
         self.parent_classes = []
         self.field_dict = {}
-        id = Attribute("id", "Integer", self)
+        id = Attribute("id", "Integer", self) # All classes have the id attr
         self.field_dict["id"] = id
 
     @property
     def fields(self):
         """The fields of this class"""
         return self.field_dict.values()
+
     @property
     def attributes(self):
         """The fields of this class which contain data"""
         return filter(lambda x: isinstance(x, Attribute), self.fields)
+
     @property
     def references(self):
         """fields which reference other objects"""
         def isRef(x): return isinstance(x, Reference) and not isinstance(x, Collection)
         return filter(isRef, self.fields)
+
     @property
     def collections(self):
         """fields which reference many other objects"""
         return filter(lambda x: isinstance(x, Collection), self.fields)
+
     def get_field(self, name):
         if name in self.field_dict:
             return self.field_dict[name]
@@ -37,7 +50,10 @@ class Class(object):
             raise ModelError("There is no field called %s in %s" % (name, self.name))
 
     def isa(self, other):
-        """Check if self is, or inherits from other"""
+        """Check if self is, or inherits from other
+
+        Other can be passed as a name, or as the class object itself
+        """
         if isinstance(other, Class):
             other_name = other.name
         else:
@@ -53,6 +69,8 @@ class Class(object):
     
 
 class Field(object):
+    """The base class for attributes, references and collections. All
+    columns in DB tables are represented by fields"""
     def __init__(self, n, t, c):
         self.name = n
         self.type_name = t
@@ -63,9 +81,12 @@ class Field(object):
 
 
 class Attribute(Field):
+    """Attributes are fields with their own values"""
     pass
 
 class Reference(Field):
+    """References are fields which refer to other objects, which may
+    have their own values"""
     def __init__(self, n, t, c, rt):
         self.reverse_reference_name = rt
         super(Reference, self).__init__(n, t, c)
@@ -78,9 +99,17 @@ class Reference(Field):
             return s + ", which links back to this as " + self.reverse_reference.name
 
 class Collection(Reference):
+    """Collections are references which refer to groups of objects"""
     pass
 
 class Path(object):
+    """A class representing a validated dotted string path
+
+    Arguments:
+    path_string - the dotted path string (eg: Gene.proteins.name)
+    model - the model to validate the path against
+    subclasses - a dict which maps subclasses (defaults to an empty dict)
+    """
     def __init__(self, path_string, model, subclasses={}):
         self._string = path_string
         self.parts = model.parse_path_string(path_string, subclasses)
@@ -96,6 +125,8 @@ class Path(object):
         return self.parts[-1]
 
     def get_class(self):
+        """Return the class object for this path, if it refers to a class
+        or a reference. Attribute paths return None"""
         if self.is_class():
             return self.end
         elif self.is_reference():
@@ -104,12 +135,16 @@ class Path(object):
             return None
     
     def is_reference(self):
+        """Return true if the path is a reference, eg: Gene.organism or Gene.proteins
+        Note: Collections are ALSO references"""
         return isinstance(self.end, Reference)
 
     def is_class(self):
+        """Return true if the path just refers to a class, eg: Gene"""
         return isinstance(self.end, Class)
 
     def is_attribute(self):
+        """Return true if the path refers to an attribute, eg: Gene.length"""
         return isinstance(self.end, Attribute)
 
 class Model(object):
@@ -179,6 +214,9 @@ class Model(object):
                     f.reverse_reference = f.type_class.field_dict[rrn]
 
     def to_ancestry(self, cd):
+        """Returns the lineage of the class: ie, the class' parents, and all the class' parents' parents
+        model.to_ancestry(cd) -> list(classes)
+        """
         parents = cd.parents
         def defined(x): return x is not None # weeds out the java classes
         def to_class(x): return self.classes.get(x)
@@ -188,27 +226,36 @@ class Model(object):
         return ancestry
 
     def to_classes(self, classnames):
-        """take a list of class names and return a list of classes"""
+        """take a list of class names and return a list of classes
+        model.to_classes(list(classnames)) -> list(classes)
+        """
         return map(self.get_class, classnames)
 
     def get_class(self, name):
-        """Get a class by its name"""
+        """Get a class by its name, or by a dotted path
+        model.get_class(name) -> class
+        """
         if name.find(".") != -1:
-            end = self.parse_path_string(name).pop()
-            if isinstance(end, Class):
-                name = end.name
-            else: 
-                name = end.type_name
+            path = self.make_path(name)
+            if path.is_attribute():
+                raise ModelError("'" + str(path) + "' is not a class")
+            else:
+                return path.get_class()
         if name in self.classes:
           return self.classes[name]
         else:
           raise ModelError("'" + name + "' is not a class in this model")
 
     def make_path(self, path, subclasses={}):
+        """Return a path object for the given path string
+        model.make_path(string) -> path
+        """
         return Path(path, self, subclasses)
 
     def validate_path(self, path_string, subclasses={}):
-        """Validate a path"""
+        """Validate a path - raises exceptions for invalid paths
+        model.validate_path(string) -> Bool
+        """
         try:
             self.parse_path_string(path_string, subclasses)
             return True
@@ -217,6 +264,9 @@ class Model(object):
                             % ( path_string, str(subclasses) ), e )
 
     def parse_path_string(self, path_string, subclasses={}):
+        """Parse a path string into a list of descriptors - one for each section
+        model.parse_path_string(string) -> list(descriptors)
+        """
         descriptors = []
         names = path_string.split('.')
         root_name = names.pop(0)
@@ -253,16 +303,3 @@ class PathParseError(ModelError):
 class ModelParseError(ModelError):
     pass
 
-#xmlfile = "/home/alex/svn/dev/testmodel/dbmodel/build/model/testmodel_model.xml"
-#xml = 'http://www.flymine.org/query/service/model'
-#model = Model(xml)
-#
-#def toString(x): return x.toString()
-#for x in ['Gene', 'Exon', 'Amplicon']:
-#    c = model.class_by_name(x)
-#    print c.name, ", which inherits from", c.parents
-#    print ". attributes:", map(toString, c.attributes)
-#    print ". references:", map(toString, c.references)
-#    print ". collections:", map(toString, c.collections)
-#
-##
