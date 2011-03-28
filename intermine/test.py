@@ -1,5 +1,5 @@
 import threading
-from intermine.model import Model, ModelError
+from intermine.model import Model, ModelError, ModelParseError
 from intermine.webservice import Service, ServiceError
 from intermine.query import Query, Template, ConstraintError, QueryError
 from intermine.constraints import LogicParseError, BinaryConstraint, TernaryConstraint, LoopConstraint, SubClassConstraint
@@ -20,6 +20,10 @@ class TestInstantiation(unittest.TestCase):
     def testMakeModel(self):
         m = Model("http://localhost:8000/test/service/model")
         self.assertTrue(isinstance(m, Model), "Can make a model")
+        try:
+            bad_m = Model("foo")
+        except ModelParseError as ex:
+            self.assertEqual(ex.message, "Error parsing model")
 
     def testMakeService(self):
         s = Service("http://localhost:8000/test/service")
@@ -333,5 +337,5 @@ class TestTemplates(unittest.TestCase):
 if __name__ == '__main__':
     server = ServerThread()
     server.start()
-    time.sleep(0.1)
+    time.sleep(0.1) # Avoid race conditions with the server
     unittest.main()
