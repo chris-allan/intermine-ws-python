@@ -1,5 +1,5 @@
 from xml.dom import minidom
-from intermine.util import openAnything
+from intermine.util import openAnything, ReadableException
 import re
 
 class Class(object):
@@ -164,7 +164,7 @@ class Model(object):
                     cl.field_dict[name] = col
                 self.classes[class_name] = cl
         except Exception, error:
-            raise ModelParseError(error.message)
+            raise ModelParseError("Error parsing model", error)
 
     def vivify(self):
         """make names point to instances and insert inherited fields"""
@@ -244,7 +244,7 @@ class Model(object):
      
         return descriptors 
 
-class ModelError(Exception):
+class ModelError(ReadableException):
     pass
 
 class PathParseError(ModelError):

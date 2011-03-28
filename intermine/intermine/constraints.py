@@ -1,6 +1,7 @@
 import re
 import string
 from intermine.pathfeatures import PathFeature, PATH_PATTERN
+from intermine.util import ReadableException
 
 class Constraint(PathFeature):
     child_type = "constraint"
@@ -49,7 +50,7 @@ class LogicGroup(LogicNode):
                 codes.append(node.code)
         return codes
 
-class LogicParseError(Exception):
+class LogicParseError(ReadableException):
     pass
 
 class LogicParser(object):

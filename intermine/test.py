@@ -1,8 +1,8 @@
 import threading
 from intermine.model import Model, ModelError
-from intermine.service import Service, ServiceError
+from intermine.webservice import Service, ServiceError
 from intermine.query import Query, Template, ConstraintError, QueryError
-from intermine.constraints import LogicParseError
+from intermine.constraints import LogicParseError, BinaryConstraint, TernaryConstraint, LoopConstraint, SubClassConstraint
 import SimpleHTTPServer
 import time
 
@@ -46,7 +46,7 @@ class TestQuery(unittest.TestCase):
     expected_unary = '[<UnaryConstraint: Employee.age IS NULL>, <UnaryConstraint: Employee.name IS NOT NULL>]'
     expected_binary = '[<BinaryConstraint: Employee.age > 50000>, <BinaryConstraint: Employee.name = John>, <BinaryConstraint: Employee.end != 0>]'
     expected_multi = "[<MultiConstraint: Employee.name ONE OF ['Tom', 'Dick', 'Harry']>, <MultiConstraint: Manager.name NONE OF ['Sue', 'Jane', 'Helen']>]"
-    expected_ternary = '[<TernaryConstraint: Employee LOOKUP Susan>, <TernaryConstraint: Employee LOOKUP John IN Wernham-Hogg>]'
+    expected_ternary = '[<TernaryConstraint: Employee LOOKUP Susan>, <TernaryConstraint: Employee.department.manager LOOKUP John IN Wernham-Hogg>]'
     expected_subclass = "[<SubClassConstraint: Department.employees ISA Manager>]"
 
     def setUp(self):
@@ -66,9 +66,10 @@ class TestQuery(unittest.TestCase):
             "Employee.department.manager.name", "Employee.department.company.CEO.name", 
             "Employee.department.manager.name", "Employee.department.company.CEO.name"]
         self.assertEqual(self.q.views, expected)
-        with self.assertRaises(ConstraintError) as context:
+        try: 
             self.q.add_view("Employee.name", "Employee.age", "Employee.department")
-        self.assertEqual("Employee.department does not represent an attribute", context.exception.message)
+        except ConstraintError as ex:
+            self.assertEqual(ex.message, "'Employee.department' does not represent an attribute")
 
     def testSortOrder(self):
         self.q.add_view("Employee.name", "Employee.age", "Employee.fullTime")
@@ -77,18 +78,16 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(str(self.q.get_sort_order()), "Employee.fullTime desc")
         self.q.add_sort_order("Employee.age", "asc")
         self.assertEqual(str(self.q.get_sort_order()), "Employee.fullTime desc,Employee.age asc")
-        with self.assertRaises(ModelError) as context:
-            self.q.add_sort_order("Foo", "asc")
-        with self.assertRaises(TypeError) as context:
-            self.q.add_sort_order("Employee.name", "up")
-        with self.assertRaises(QueryError) as context:
-            self.q.add_sort_order("Employee.id", "desc")
+        self.assertRaises(ModelError, self.q.add_sort_order, "Foo", "asc")
+        self.assertRaises(TypeError,  self.q.add_sort_order, "Employee.name", "up")
+        self.assertRaises(QueryError, self.q.add_sort_order, "Employee.id", "desc")
 
 
-    def testConstraintProblems(self):
-        with self.assertRaises(ModelError) as context:
+    def testConstraintPathProblems(self):
+        try:
             self.q.add_constraint('Foo', 'IS NULL')
-        self.assertEqual(context.exception.message, "'Foo' is not a class in this model")
+        except ModelError as ex:
+            self.assertEqual(ex.message, "'Foo' is not a class in this model")
 
     def testUnaryConstraints(self):
         self.q.add_constraint('Employee.age', 'IS NULL')
@@ -100,11 +99,19 @@ class TestQuery(unittest.TestCase):
         self.q.add_constraint('Employee.name', '=', 'John')
         self.q.add_constraint('Employee.end', '!=', 0)
         self.assertEqual(self.q.constraints.__repr__(), self.expected_binary)
+        try:
+            self.q.add_constraint('Department.company', '=', "foo")
+        except ConstraintError as ex:
+            self.assertEqual(ex.message, "'Department.company' does not represent an attribute")
 
     def testTernaryConstraint(self):
         self.q.add_constraint('Employee', 'LOOKUP', 'Susan')
-        self.q.add_constraint('Employee', 'LOOKUP', 'John', 'Wernham-Hogg')
+        self.q.add_constraint('Employee.department.manager', 'LOOKUP', 'John', 'Wernham-Hogg')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_ternary)
+        try:
+            self.q.add_constraint('Department.company.name', 'LOOKUP', "foo")
+        except ConstraintError as ex:
+            self.assertEqual(ex.message, "'Department.company.name' does not represent a class, or a reference to a class")
 
     def testMultiConstraint(self):
         self.q.add_constraint('Employee.name', 'ONE OF', ['Tom', 'Dick', 'Harry'])
@@ -114,16 +121,14 @@ class TestQuery(unittest.TestCase):
     def testSubclassConstraints(self):
         self.q.add_constraint('Department.employees', 'Manager')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_subclass)
-        with self.assertRaises(ModelError) as context:
+        try:
            self.q.add_constraint('Department.company.CEO', 'Foo')
-        self.assertEqual(
-            context.exception.message, 
-            "'Foo' is not a class in this model")
-        with self.assertRaises(ConstraintError) as context:
+        except ModelError as ex:
+            self.assertEqual(ex.message, "'Foo' is not a class in this model")
+        try:
             self.q.add_constraint('Department.company.CEO', 'Manager')
-        self.assertEqual(
-            context.exception.message, 
-            "'Manager' is not a subclass of 'Department.company.CEO'")
+        except ConstraintError as ex:
+            self.assertEqual(ex.message, "'Manager' is not a subclass of 'Department.company.CEO'")
 
     def testLogic(self):
         self.q.add_constraint("Employee.name", "IS NOT NULL")
@@ -139,29 +144,18 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(str(self.q.get_logic()), "B and (C or A) and D")
         self.q.set_logic("(A and B) or (A and C and D)")
         self.assertEqual(str(self.q.get_logic()), "(A and B) or (A and C and D)")
-        with self.assertRaises(ConstraintError) as context:
-            self.q.set_logic("E and C or A and D")
-        with self.assertRaises(QueryError) as context:
-            self.q.set_logic("A and B and C")
-        with self.assertRaises(LogicParseError) as context:
-            self.q.set_logic("A and B and C not D")
-        with self.assertRaises(LogicParseError) as context:
-            self.q.set_logic("A and ((B and C and D)")
-        with self.assertRaises(LogicParseError) as context:
-            self.q.set_logic("A and ((B and C) and D))")
-        with self.assertRaises(LogicParseError) as context:
-            self.q.set_logic("A and B( and C and D)")
-        with self.assertRaises(LogicParseError) as context:
-            self.q.set_logic("A and (B and C and )D")
+        self.assertRaises(ConstraintError, self.q.set_logic, "E and C or A and D")
+        self.assertRaises(QueryError,      self.q.set_logic, "A and B and C")
+        self.assertRaises(LogicParseError, self.q.set_logic, "A and B and C not D")
+        self.assertRaises(LogicParseError, self.q.set_logic, "A and ((B and C and D)")
+        self.assertRaises(LogicParseError, self.q.set_logic, "A and ((B and C) and D))")
+        self.assertRaises(LogicParseError, self.q.set_logic, "A and B( and C and D)")
+        self.assertRaises(LogicParseError, self.q.set_logic, "A and (B and C and )D")
 
     def testJoins(self):
-        with self.assertRaises(TypeError) as context:
-            self.q.add_join('Employee.department', 'foo')
-        self.assertEqual(context.exception.message, "Unknown join style: foo")
-        with self.assertRaises(ConstraintError) as context:
-            self.q.add_join('Employee.age', 'inner')
-        self.assertEqual(context.exception.message, 
-            "'Employee.age' is not a reference")
+        self.assertRaises(TypeError,       self.q.add_join, 'Employee.department', 'foo')
+        self.assertRaises(ConstraintError, self.q.add_join, 'Employee.age', 'inner')
+        self.assertRaises(ModelError,      self.q.add_join, 'Employee.foo', 'inner')
         self.q.add_join('Employee.department', 'inner')
         self.q.add_join('Employee.department.company', 'outer')
         expected = "[<Join: Employee.department INNER>, <Join: Employee.department.company OUTER>]"
@@ -186,7 +180,7 @@ class TestTemplate(TestQuery):
     expected_unary = '[<TemplateUnaryConstraint: Employee.age IS NULL (editable, locked)>, <TemplateUnaryConstraint: Employee.name IS NOT NULL (editable, locked)>]'
     expected_binary = '[<TemplateBinaryConstraint: Employee.age > 50000 (editable, locked)>, <TemplateBinaryConstraint: Employee.name = John (editable, locked)>, <TemplateBinaryConstraint: Employee.end != 0 (editable, locked)>]'
     expected_multi = "[<TemplateMultiConstraint: Employee.name ONE OF ['Tom', 'Dick', 'Harry'] (editable, locked)>, <TemplateMultiConstraint: Manager.name NONE OF ['Sue', 'Jane', 'Helen'] (editable, locked)>]"
-    expected_ternary = '[<TemplateTernaryConstraint: Employee LOOKUP Susan (editable, locked)>, <TemplateTernaryConstraint: Employee LOOKUP John IN Wernham-Hogg (editable, locked)>]'
+    expected_ternary = '[<TemplateTernaryConstraint: Employee LOOKUP Susan (editable, locked)>, <TemplateTernaryConstraint: Employee.department.manager LOOKUP John IN Wernham-Hogg (editable, locked)>]'
     expected_subclass = '[<TemplateSubClassConstraint: Department.employees ISA Manager (editable, locked)>]'
 
     def setUp(self):
@@ -314,11 +308,10 @@ class TestTemplates(unittest.TestCase):
         self.assertEqual(t.editable_constraints.__repr__(), expected)
         expected = [['foo', 'bar', 'baz'],['quux','fizz','fop']]
         self.assertEqual(t.results(), expected)
-        with self.assertRaises(ServiceError) as context:
+        try:
             self.service.get_template("Non_Existant")
-        self.assertEqual(
-            "There is no template called 'Non_Existant' at this service", 
-            context.exception.message)
+        except ServiceError as ex:
+            self.assertEqual(ex.message, "There is no template called 'Non_Existant' at this service")
     
     def testTemplateConstraintParsing(self):
         t = self.service.get_template("UneditableConstraints")

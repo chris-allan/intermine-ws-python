@@ -13,3 +13,14 @@ def openAnything(source):
 
     import StringIO
     return StringIO.StringIO(str(source))
+
+class ReadableException(Exception):
+    def __init__(self, message, cause=None):
+        self.message = message
+        self.cause = cause
+
+    def __str__(self):
+        if self.cause is None:
+            return repr(self.message)
+        else:
+            return repr(self.message) + repr(self.cause)

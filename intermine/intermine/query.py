@@ -2,8 +2,8 @@ import re
 from copy import deepcopy
 from xml.dom import minidom, getDOMImplementation
 
-from intermine.util import openAnything
-from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint, LogicParser, CodedConstraint, LogicGroup
+from intermine.util import openAnything, ReadableException
+from intermine.constraints import *
 from intermine.pathfeatures import PathDescription, Join, SortOrder, SortOrderList
 
 class Query(object):
@@ -52,7 +52,7 @@ class Query(object):
             if args['path'] is None:
                 if c.parentNode.tagName != "node":
                     msg = "Constraints must have a path"
-                    raise ParseError(msg)
+                    raise QueryParseError(msg)
                 args['path'] = c.parentNode.getAttribute('path')
             args['op'] = c.getAttribute('op')
             args['value'] = c.getAttribute('value')
@@ -106,7 +106,7 @@ class Query(object):
         for path in views:
             path = self.model.make_path(path, self.get_subclass_dict())
             if not path.is_attribute():
-                raise ConstraintError(str(path) + " does not represent an attribute")
+                raise ConstraintError("'" + str(path) + "' does not represent an attribute")
 
     def add_constraint(self, *args, **kwargs):
         con = self.constraint_factory.make_constraint(*args, **kwargs)
@@ -122,11 +122,17 @@ class Query(object):
         if constraints is None: constraints = self.constraints
         for con in constraints:
             pathA = self.model.make_path(con.path, self.get_subclass_dict())
-            if hasattr(con, 'subclass'):
+            if isinstance(con, TernaryConstraint):
+                if pathA.get_class() is None:
+                    raise ConstraintError("'" + str(pathA) + "' does not represent a class, or a reference to a class")
+            elif isinstance(con, BinaryConstraint):
+                if not pathA.is_attribute():
+                    raise ConstraintError("'" + str(pathA) + "' does not represent an attribute")
+            elif isinstance(con, SubClassConstraint):
                 pathB = self.model.make_path(con.subclass, self.get_subclass_dict())
                 if not pathB.get_class().isa(pathA.get_class()):
                     raise ConstraintError("'" + con.subclass + "' is not a subclass of '" + con.path + "'")
-            if hasattr(con, "loopPath"):
+            elif isinstance(con, LoopConstraint):
                 self.model.validate_path(con.loopPath, self.get_subclass_dict())
 
     @property
@@ -334,11 +340,12 @@ class Template(Query):
         clone = self.get_adjusted_template(con_values)
         return super(Template, clone).get_results_iterator(row)
 
-class QueryError(Exception):
+class QueryError(ReadableException):
     pass
 
-class ConstraintError(Exception):
+class ConstraintError(QueryError):
     pass
 
-            
+class QueryParseError(QueryError):
+    pass
 

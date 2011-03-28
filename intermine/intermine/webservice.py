@@ -3,8 +3,11 @@ from xml.dom import minidom
 from urllib import urlopen
 from urllib import urlencode 
 import csv
+
+# Local intermine imports
 from query import Query, Template
 from model import Model
+from util import ReadableException
 
 class Service(object):
     QUERY_PATH         = '/query/results'
@@ -99,5 +102,5 @@ class ResultIterator(object):
     def next(self):
         return self.reader.next()
 
-class ServiceError(Exception):
+class ServiceError(ReadableException):
     pass
