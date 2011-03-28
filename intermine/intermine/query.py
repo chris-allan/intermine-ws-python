@@ -3,8 +3,8 @@ from copy import deepcopy
 from xml.dom import minidom, getDOMImplementation
 
 from intermine.util import openAnything
-from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint
-from intermine.pathfeatures import PathDescription, Join
+from intermine.constraints import ConstraintFactory, TemplateConstraintFactory, SubClassConstraint, LogicParser, CodedConstraint, LogicGroup
+from intermine.pathfeatures import PathDescription, Join, SortOrder, SortOrderList
 
 class Query(object):
 
@@ -17,8 +17,10 @@ class Query(object):
         self.path_descriptions = []
         self.joins = []
         self.constraint_dict = {}
+        self.uncoded_constraints = []
         self.views = []
-        self._sort_order = None
+        self._sort_order_list = SortOrderList()
+        self._logic_parser = LogicParser(self)
         self._logic = None
         self.constraint_factory = ConstraintFactory()
 
@@ -86,6 +88,7 @@ class Query(object):
         self.verify_constraint_paths()
         self.verify_join_paths()
         self.verify_pd_paths()
+        self.validate_sort_order()
         self.do_verification = True
 
     def add_view(self, *paths):
@@ -108,7 +111,11 @@ class Query(object):
     def add_constraint(self, *args, **kwargs):
         con = self.constraint_factory.make_constraint(*args, **kwargs)
         if self.do_verification: self.verify_constraint_paths([con])
-        self.constraint_dict[con.code] = con
+        if hasattr(con, "code"): 
+            self.constraint_dict[con.code] = con
+        else:
+            self.uncoded_constraints.append(con)
+        
         return con
 
     def verify_constraint_paths(self, constraints=None):
@@ -124,12 +131,14 @@ class Query(object):
 
     @property
     def constraints(self):
-        return sorted(self.constraint_dict.values(), key=lambda con: con.code)
+        ret = sorted(self.constraint_dict.values(), key=lambda con: con.code)
+        ret.extend(self.uncoded_constraints)
+        return ret
 
     def get_constraint(self, code):
-        try: 
+        if code in self.constraint_dict: 
             return self.constraint_dict[code]
-        except KeyError:
+        else:
             raise ConstraintError("There is no constraint with the code '"  
                                     + code + "' on this query")
         
@@ -157,28 +166,57 @@ class Query(object):
         for pd in pds: 
             self.model.validate_path(pd.path, self.get_subclass_dict())
 
+    @property
+    def coded_constraints(self):
+        return sorted(self.constraint_dict.values(), key=lambda con: con.code)
+
     def get_logic(self):
         if self._logic is None:
-            self._logic = reduce(lambda(x, y): x+y, self.constraints)
-        return self._logic
+            return reduce(lambda x, y: x+y, self.coded_constraints)
+        else:
+            return self._logic
 
     def set_logic(self, value):
-        self._logic = value
+        if isinstance(value, LogicGroup):
+            logic = value
+        else: 
+            logic = self._logic_parser.parse(value)
+        if self.do_verification: self.validate_logic(logic)
+        self._logic = logic
+
+    def validate_logic(self, logic=None):
+        if logic is None: logic = self._logic
+        logic_codes = set(logic.get_codes())
+        for con in self.coded_constraints:
+            if con.code not in logic_codes:
+                raise QueryError("Constraint " + con.code + repr(con) 
+                        + " is not mentioned in the logic: " + str(logic))
+
+    def get_default_sort_order(self):
+        try:
+            return SortOrderList((self.views[0], SortOrder.ASC))
+        except IndexError:
+            raise QueryError("Query view is empty")
 
     def get_sort_order(self):
-        if self._sort_order is None:
-            try:
-                return (self.views[0], "asc")
-            except IndexError:
-                raise QueryError("Query view is empty")
+        if self._sort_order_list.is_empty():
+            return self.get_default_sort_order()         
         else:
-            return self._sort_order
+            return self._sort_order_list
 
-    def set_sort_order(self, path, direction='asc'):
-        valid_directions = set(['asc', 'desc'])
-        if not direction in valid_directions:
-            raise TypeError("Direction must be one of " + str(valid_directions) + " not " + direction)
-        self._sort_order = (path, direction)
+    def add_sort_order(self, path, direction=SortOrder.ASC):
+        so = SortOrder(path, direction)
+        if self.do_verification: self.validate_sort_order(so)
+        self._sort_order_list.append(so)
+
+    def validate_sort_order(self, *so_elems):
+        if not so_elems:
+            so_elems = self._sort_order_list
+        
+        for so in so_elems:
+            self.model.validate_path(so.path, self.get_subclass_dict())
+            if so.path not in self.views:
+                raise QueryError("Sort order element is not in the view: " + so.path)
 
     def get_subclass_dict(self):
         subclass_dict = {}
@@ -219,8 +257,10 @@ class Query(object):
         query.setAttribute('name', self.name)
         query.setAttribute('model', self.model.name)
         query.setAttribute('view', ' '.join(self.views))
-        query.setAttribute('sortOrder', ' '.join(self.get_sort_order()))
+        query.setAttribute('sortOrder', str(self.get_sort_order()))
         query.setAttribute('longDescription', self.description)
+        if len(self.coded_constraints) > 1:
+            query.setAttribute('constraintLogic', str(self.get_logic()))
 
         for c in self.children():
             element = doc.createElement(c.child_type)
@@ -245,7 +285,7 @@ class Query(object):
 
     def clone(self):
         newobj = self.__class__(self.model)
-        for attr in ["joins", "views", "_sort_order", "_logic", "path_descriptions", "constraint_dict"]:
+        for attr in ["joins", "views", "_sort_order_list", "_logic", "path_descriptions", "constraint_dict"]:
             setattr(newobj, attr, deepcopy(getattr(self, attr)))
 
         for attr in ["name", "description", "service", "do_verification", "constraint_factory"]:

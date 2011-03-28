@@ -6,27 +6,178 @@ class Constraint(PathFeature):
     child_type = "constraint"
 
 class LogicNode(object):
+    def __add__(self, other):
+        if not isinstance(other, LogicNode):
+            return NotImplemented
+        else:
+            return LogicGroup(self, 'AND', other)
     def __and__(self, other):
         if not isinstance(other, LogicNode):
             return NotImplemented
         else:
-            return LogicGroup(self, 'and', other)
+            return LogicGroup(self, 'AND', other)
     def __or__(self, other):
         if not isinstance(other, LogicNode):
             return NotImplemented
         else:
-            return LogicGroup(self, 'or', other)
+            return LogicGroup(self, 'OR', other)
 
 class LogicGroup(LogicNode):
-    LEGAL_OPS = set(['and', 'or'])
-    def __init__(self, left, op, right):
+    LEGAL_OPS = frozenset(['AND', 'OR'])
+    def __init__(self, left, op, right, parent=None):
         if not op in self.LEGAL_OPS:
             raise TypeError(op + " is not a legal logical operation")
+        self.parent = parent
         self.left = left
         self.right = right
         self.op = op
+        for node in [self.left, self.right]:
+            if isinstance(node, LogicGroup):
+                node.parent = self
+            
+    def __repr__(self):
+        return '<' + self.__class__.__name__ + ': ' + str(self) + '>'
     def __str__(self):
-        return ' '.join(map(str, [self.left, self.op, self.right]))
+        core = ' '.join(map(str, [self.left, self.op.lower(), self.right]))
+        return '(' + core + ')' if self.parent and self.op != self.parent.op else core
+    def get_codes(self):
+        codes = []
+        for node in [self.left, self.right]:
+            if isinstance(node, LogicGroup):
+                codes.extend(node.get_codes())
+            else:
+                codes.append(node.code)
+        return codes
+
+class LogicParseError(Exception):
+    pass
+
+class LogicParser(object):
+
+    def __init__(self, query):
+        self._query = query
+
+    def get_constraint(self, code):
+        return self._query.get_constraint(code) 
+
+    def get_priority(self, op):
+        return {
+        "AND": 2,
+        "OR" : 1,
+        "("  : 3,
+        ")"  : 3
+        }.get(op)
+
+    ops = {
+        "AND" : "AND",
+        "&"   : "AND",
+        "&&"  : "AND",
+        "OR"  : "OR",
+        "|"   : "OR",
+        "||"  : "OR",
+        "("   : "(",
+        ")"   : ")"
+    }
+
+    def parse(self, logic_str):
+        def flatten(l): 
+            ret = []
+            for item in l:
+                if isinstance(item, list):
+                    ret.extend(item)
+                else:
+                    ret.append(item)
+            return ret
+        logic_str = logic_str.upper()
+        tokens = re.split("\s+", logic_str)
+        tokens = flatten([self.ops[x] if x in self.ops else re.split("\b", x) for x in tokens])
+        tokens = flatten([list(x) if re.search("[()]", x) else x for x in tokens])
+        self.check_syntax(tokens)
+        postfix_tokens = self.infix_to_postfix(tokens)
+        abstract_syntax_tree = self.postfix_to_tree(postfix_tokens)
+        return abstract_syntax_tree
+
+    def check_syntax(self, infix_tokens):
+        need_an_op = False
+        need_binary_op_or_closing_bracket = False
+        processed = []
+        open_brackets = 0
+        for token in infix_tokens:
+            if token not in self.ops:
+                if need_an_op:
+                    raise LogicParseError("Expected an operator after: '" + ' '.join(processed) + "'"
+                                          + " - but got: '" + token + "'")
+                if need_binary_op_or_closing_bracket:
+                    raise LogicParseError("Logic grouping error after: '" + ' '.join(processed) + "'"
+                                          + " - expected an operator or a closing bracket")
+
+                need_an_op = True
+            else:
+                need_an_op = False
+                if token == "(":
+                    if processed and processed[-1] not in self.ops:
+                        raise LogicParseError("Logic grouping error after: '" + ' '.join(processed) + "'"
+                                          + " - got an unexpeced opening bracket")
+                    if need_binary_op_or_closing_bracket:
+                        raise LogicParseError("Logic grouping error after: '" + ' '.join(processed) + "'"
+                                          + " - expected an operator or a closing bracket")
+
+                    open_brackets += 1
+                elif token == ")":
+                    need_binary_op_or_closing_bracket = True
+                    open_brackets -= 1
+                else:
+                    need_binary_op_or_closing_bracket = False
+            processed.append(token)
+        if open_brackets != 0:
+            if open_brackets < 0:
+                message = "Unmatched closing bracket in: "
+            else:
+                message = "Unmatched opening bracket in: "
+            raise LogicParseError(message + '"' + ' '.join(infix_tokens) + '"')
+        
+    def infix_to_postfix(self, infix_tokens):
+        stack = []
+        postfix_tokens = []
+        for token in infix_tokens:
+            if token not in self.ops:
+                postfix_tokens.append(token)
+            else:
+                op = token
+                if op == "(":
+                    stack.append(token)
+                elif op == ")":
+                    while stack:
+                        last_op = stack.pop()
+                        if last_op == "(":
+                            if stack:
+                                previous_op = stack.pop()
+                                if previous_op != "(": postfix_tokens.append(previous_op)
+                                break
+                        else: 
+                            postfix_tokens.append(last_op)
+                else:
+                    while stack and self.get_priority(stack[-1]) <= self.get_priority(op):
+                        prev_op = stack.pop()
+                        if prev_op != "(": postfix_tokens.append(prev_op)
+                    stack.append(op)
+        while stack: postfix_tokens.append(stack.pop())
+        return postfix_tokens
+
+    def postfix_to_tree(self, postfix_tokens):
+        stack = []
+        for token in postfix_tokens:
+            if token not in self.ops:
+                stack.append(token)
+            else:
+                op = token
+                right = stack.pop()
+                left = stack.pop()
+                right = right if isinstance(right, LogicGroup) else self.get_constraint(right)
+                left = left if isinstance(left, LogicGroup) else self.get_constraint(left)
+                stack.append(LogicGroup(left, op, right))
+        assert len(stack) == 1, "Tree doesn't have a unique root"
+        return stack.pop()
 
 class CodedConstraint(Constraint, LogicNode):
     OPS = set([])
@@ -258,7 +409,7 @@ class ConstraintFactory(object):
         for CC in self.CONSTRAINT_CLASSES:
             try:
                 c = CC(*args, **kwargs)
-                c.code = self.get_next_code()
+                if hasattr(c, "code"): c.code = self.get_next_code()
                 return c
             except TypeError, e:
                 pass

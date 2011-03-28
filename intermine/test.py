@@ -1,8 +1,10 @@
 import threading
 from intermine.model import Model, ModelError
 from intermine.service import Service, ServiceError
-from intermine.query import Query, Template, ConstraintError
+from intermine.query import Query, Template, ConstraintError, QueryError
+from intermine.constraints import LogicParseError
 import SimpleHTTPServer
+import time
 
 import unittest
 
@@ -68,6 +70,21 @@ class TestQuery(unittest.TestCase):
             self.q.add_view("Employee.name", "Employee.age", "Employee.department")
         self.assertEqual("Employee.department does not represent an attribute", context.exception.message)
 
+    def testSortOrder(self):
+        self.q.add_view("Employee.name", "Employee.age", "Employee.fullTime")
+        self.assertEqual(str(self.q.get_sort_order()), "Employee.name asc")
+        self.q.add_sort_order("Employee.fullTime", "desc")
+        self.assertEqual(str(self.q.get_sort_order()), "Employee.fullTime desc")
+        self.q.add_sort_order("Employee.age", "asc")
+        self.assertEqual(str(self.q.get_sort_order()), "Employee.fullTime desc,Employee.age asc")
+        with self.assertRaises(ModelError) as context:
+            self.q.add_sort_order("Foo", "asc")
+        with self.assertRaises(TypeError) as context:
+            self.q.add_sort_order("Employee.name", "up")
+        with self.assertRaises(QueryError) as context:
+            self.q.add_sort_order("Employee.id", "desc")
+
+
     def testConstraintProblems(self):
         with self.assertRaises(ModelError) as context:
             self.q.add_constraint('Foo', 'IS NULL')
@@ -108,6 +125,35 @@ class TestQuery(unittest.TestCase):
             context.exception.message, 
             "'Manager' is not a subclass of 'Department.company.CEO'")
 
+    def testLogic(self):
+        self.q.add_constraint("Employee.name", "IS NOT NULL")
+        self.q.add_constraint("Employee.age", ">", 10)
+        self.q.add_constraint("Employee.department", "LOOKUP", "Sales", "Wernham-Hogg")
+        self.q.add_constraint("Employee.department.employees.name", "ONE OF", 
+            ["John", "Paul", "Mary"])
+        self.q.add_constraint("Employee.department.employees", "Manager")
+        self.assertEqual(str(self.q.get_logic()), "A and B and C and D")
+        self.q.set_logic("(B or C) and (A or D)")
+        self.assertEqual(str(self.q.get_logic()), "(B or C) and (A or D)")
+        self.q.set_logic("B and C or A and D")
+        self.assertEqual(str(self.q.get_logic()), "B and (C or A) and D")
+        self.q.set_logic("(A and B) or (A and C and D)")
+        self.assertEqual(str(self.q.get_logic()), "(A and B) or (A and C and D)")
+        with self.assertRaises(ConstraintError) as context:
+            self.q.set_logic("E and C or A and D")
+        with self.assertRaises(QueryError) as context:
+            self.q.set_logic("A and B and C")
+        with self.assertRaises(LogicParseError) as context:
+            self.q.set_logic("A and B and C not D")
+        with self.assertRaises(LogicParseError) as context:
+            self.q.set_logic("A and ((B and C and D)")
+        with self.assertRaises(LogicParseError) as context:
+            self.q.set_logic("A and ((B and C) and D))")
+        with self.assertRaises(LogicParseError) as context:
+            self.q.set_logic("A and B( and C and D)")
+        with self.assertRaises(LogicParseError) as context:
+            self.q.set_logic("A and (B and C and )D")
+
     def testJoins(self):
         with self.assertRaises(TypeError) as context:
             self.q.add_join('Employee.department', 'foo')
@@ -130,7 +176,9 @@ class TestQuery(unittest.TestCase):
             ["John", "Paul", "Mary"])
         self.q.add_constraint("Employee.department.employees", "Manager")
         self.q.add_join("Employee.department", "outer")
-        expected = '<query longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
+        self.q.add_sort_order("Employee.age")
+        self.q.set_logic("(A and B) or (A and C and D)")
+        expected = '<query constraintLogic="(A and B) or (A and C and D)" longDescription="" model="testmodel" name="" sortOrder="Employee.age asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
         self.assertEqual(expected, self.q.to_xml())
 
 class TestTemplate(TestQuery):
@@ -186,7 +234,7 @@ class TestQueryResults(unittest.TestCase):
         expectedQ = (
             '/QUERY-PATH', 
             {
-                'query': '<query longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.id"><constraint code="A" op="=" path="Employee.name" value="Fred"/><constraint code="B" op="&gt;" path="Employee.age" value="25"/></query>'
+                'query': '<query constraintLogic="A and B" longDescription="" model="testmodel" name="" sortOrder="Employee.name asc" view="Employee.name Employee.age Employee.id"><constraint code="A" op="=" path="Employee.name" value="Fred"/><constraint code="B" op="&gt;" path="Employee.age" value="25"/></query>'
             }, 
             'list', 
             ['Employee.name', 'Employee.age', 'Employee.id']
@@ -292,4 +340,5 @@ class TestTemplates(unittest.TestCase):
 if __name__ == '__main__':
     server = ServerThread()
     server.start()
+    time.sleep(0.1)
     unittest.main()
