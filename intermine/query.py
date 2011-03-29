@@ -26,6 +26,23 @@ class Query(object):
 
     @classmethod
     def from_xml(cls, xml, *args, **kwargs):
+        """
+        Deserialise a query serialised to XML
+        --------------------------------------
+
+         Query.from_xml(xml) -> intermine.query.Query
+
+         May throw: QueryParseError, if the query cannot be parsed
+                    ModelError,      if the query has illegal paths in it
+                    ConstraintError, if the constraints don't make sense
+
+        This method is used to instantiate serialised queries.
+        It is used by intermine.webservice.Service objects
+        to instantiate Template objects and it can be used
+        to read in queries you have saved to a file. 
+
+        The xml argument can be a file, url or string containing xml
+        """
         obj = cls(*args, **kwargs)
         obj.do_verification = False
         f = openAnything(xml)
@@ -84,6 +101,23 @@ class Query(object):
         return obj
 
     def verify(self):
+        """
+        Validate the query
+        ------------------
+
+         Query.validate()
+
+         Will throw: ModelError, QueryError, ConstraintError, if the 
+                     query fails to validate
+
+        Invalid queries will fail to run, and it is not always
+        obvious why. The validation routine checks to see that 
+        the query will not cause errors on execution, and tries to
+        provide informative error messages.
+
+        This method is called immediately after a query is fully 
+        deserialised.
+        """
         self.verify_views()
         self.verify_constraint_paths()
         self.verify_join_paths()
@@ -92,6 +126,24 @@ class Query(object):
         self.do_verification = True
 
     def add_view(self, *paths):
+        """
+        Add one or more views to the list of output columns
+        ---------------------------------------------------
+
+         Query.add_view(view(s)...) 
+
+        This is the main method for adding views to the list
+        of output columns. As well as appending views, it
+        will also split a single, space or comma delimited
+        string into multiple paths, and flatten out lists, or any
+        combination. It will also immediately try to validate 
+        the views.
+
+        Output columns must be valid paths according to the 
+        data model, and they must represent attributes of tables
+        (see intermine.model.Model, intermine.model.Path 
+        intermine.model.Attribute)
+        """
         views = []
         for p in paths:
             if isinstance(p, (set, list)):
@@ -102,13 +154,48 @@ class Query(object):
         self.views.extend(views)
 
     def verify_views(self, views=None):
+        """
+        Check to see if the views given are valid
+        -----------------------------------------
+
+         Query.verify_views()
+
+         Will throw ModelError, ConstraintError if the views are invalid
+
+        This method checks to see if the views:
+          - are valid according to the model
+          - represent attributes
+
+        (see: intermine.model.Attribute)
+        """
         if views is None: views = self.views
         for path in views:
             path = self.model.make_path(path, self.get_subclass_dict())
             if not path.is_attribute():
-                raise ConstraintError("'" + str(path) + "' does not represent an attribute")
+                raise ConstraintError("'" + str(path) 
+                        + "' does not represent an attribute")
 
     def add_constraint(self, *args, **kwargs):
+        """
+        Add a constraint (filter on records)
+        --------------------------------------
+
+         Query.add_constraint(arg...) -> intermine.constraints.?
+
+        This method will try to make a constraint from the arguments
+        given, trying each of the classes it knows of in turn 
+        to see if they accept the arguments. This allows you 
+        to add constraints of different types without having to know
+        or care what their classes or implementation details are.
+        All constraints derive from intermine.constraints.Constraint, 
+        and they all have a path attribute, but are otherwise diverse.
+
+        Before adding the constraint to the query, this method
+        will also try to check that the constraint is valid by 
+        calling Query.verify_constraint_paths()
+
+        (see intermine.constraints)
+        """
         con = self.constraint_factory.make_constraint(*args, **kwargs)
         if self.do_verification: self.verify_constraint_paths([con])
         if hasattr(con, "code"): 
@@ -119,6 +206,23 @@ class Query(object):
         return con
 
     def verify_constraint_paths(self, constraints=None):
+        """
+        Check that the constraints are valid
+        --------------------------------------
+
+         Query.verify_constraint_paths()
+
+         Will throw ModelError, ConstraintError, if the constraints are 
+              not valid
+
+        This method will check the path attribute of each constraint.
+        In addition it will:
+          - Check that BinaryConstraints have an Attribute as their path
+          - Check that TernaryConstraints have a Reference as theirs
+          - Check that SubClassConstraints have a correct subclass relationship
+          - Check that LoopConstraints have a valid loopPath
+
+        """
         if constraints is None: constraints = self.constraints
         for con in constraints:
             pathA = self.model.make_path(con.path, self.get_subclass_dict())
@@ -137,11 +241,30 @@ class Query(object):
 
     @property
     def constraints(self):
+        """
+        Returns the constraints of the query
+        -------------------------------------
+
+         Query.constraints -> list(intermine.constraints.Constraint)
+
+        Constraints are returned in the order of their code (normally
+        the order they were added to the query) and with any
+        subclass contraints at the end.
+        """
         ret = sorted(self.constraint_dict.values(), key=lambda con: con.code)
         ret.extend(self.uncoded_constraints)
         return ret
 
     def get_constraint(self, code):
+        """
+        Returns the constraint with the given code
+        -------------------------------------------
+
+         Query.get_constraint(code) -> intermine.constraints.CodedConstraint
+
+        Returns the constraint with the given code, if if exists.
+        If no such constraint exists, it throws a ConstraintError
+        """
         if code in self.constraint_dict: 
             return self.constraint_dict[code]
         else:
@@ -149,17 +272,65 @@ class Query(object):
                                     + code + "' on this query")
         
     def add_join(self, *args ,**kwargs):
+        """
+        Add a join statement to the query
+        ----------------------------------
+
+         Query.add_join(args...) -> intermine.pathfeatures.Join
+        
+         May throw: ModelError, if the path is invalid
+                    TypeError, if the join style is invalid
+
+        A join statement is used to determine if references should
+        restrict the result set by only including those references
+        exist. For example, if one had a query with the view:
+        
+          "Gene.name", "Gene.proteins.name"
+
+        Then in the normal case (that of an INNER join), we would only 
+        get Genes that also have at least one protein that they reference.
+        Simply by asking for this output column you are placing a 
+        restriction on the information you get back. 
+        
+        If in fact you wanted all genes, regardless of whether they had  
+        proteins associated with them or not, but if they did 
+        you would rather like to know _what_ proteins, then you need
+        to specify this reference to be an OUTER join:
+
+         query.add_join("Gene.proteins", "OUTER")
+
+        Now you will get many more rows of results, some of which will
+        have "null" values where the protein name would have been,
+
+        This method will also attempt to validate the join by calling
+        Query.verify_join_paths(). Joins must have a valid path, the 
+        style can be either INNER or OUTER (defaults to OUTER,
+        as the user does not need to specify inner joins, since all
+        references start out as inner joins), and the path 
+        must be a reference.
+        """
         join = Join(*args, **kwargs)
         if self.do_verification: self.verify_join_paths([join])
         self.joins.append(join)
         return join
 
     def verify_join_paths(self, joins=None):
+        """
+        Check that the joins are valid
+        -------------------------------
+
+         Query.verify_join_paths()
+
+         May throw: ModelError, QueryError if the paths are not
+                    valid
+
+        Joins must have valid paths, and they must refer to references.
+        """
         if joins is None: joins = self.joins
         for join in joins:
             path = self.model.make_path(join.path, self.get_subclass_dict())
             if not path.is_reference():
-                raise ConstraintError("'" + join.path + "' is not a reference")
+                raise QueryError("'" + join.path + "' is not a reference")
 
     def add_path_description(self, *args ,**kwargs):
         path_description = PathDescription(*args, **kwargs)
@@ -240,8 +411,8 @@ class Query(object):
     def get_results_path(self):
         return self.service.QUERY_PATH
 
-    def get_results_iterator(self, rowformat="list"):
-        return self.service.get_results_iterator(
+    def get_results_list(self, rowformat="list"):
+        return self.service.get_results_list(
                 self.get_results_path(),
                 self.to_query_params(),
                 rowformat,
@@ -336,9 +507,9 @@ class Template(Query):
         clone = self.get_adjusted_template(con_values)
         return super(Template, clone).results(row)
 
-    def get_results_iterator(self, row="list", **con_values):
+    def get_results_list(self, row="list", **con_values):
         clone = self.get_adjusted_template(con_values)
-        return super(Template, clone).get_results_iterator(row)
+        return super(Template, clone).get_results_list(row)
 
 class QueryError(ReadableException):
     pass
