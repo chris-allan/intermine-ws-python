@@ -7,7 +7,7 @@ setup(
         author = "Alex Kalderimis",
         author_email = "dev@intermine.org",
         url = "http://www.intermine.org/",
-        download_url = "http://www.intermine.org/downloads/python-webservice-client-0.94.00.tgz",
+        download_url = "http://www.intermine.org/downloads/python-webservice-client-0.96.00.tar.gz",
         keywords = ["webservice", "genomic", "bioinformatics"],
         classifiers = [
             "Programming Language :: Python",
@@ -21,6 +21,7 @@ setup(
             "Topic :: Scientific/Engineering :: Information Analysis",
             "Operating System :: OS Independent",
             ],
+        license = "LGPL",
         long_description = """\
 InterMine Webservice Client
 ----------------------------
