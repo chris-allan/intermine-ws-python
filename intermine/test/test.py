@@ -208,7 +208,7 @@ class TestQuery(unittest.TestCase):
 
     def testJoins(self):
         self.assertRaises(TypeError,       self.q.add_join, 'Employee.department', 'foo')
-        self.assertRaises(ConstraintError, self.q.add_join, 'Employee.age', 'inner')
+        self.assertRaises(QueryError, self.q.add_join, 'Employee.age', 'inner')
         self.assertRaises(ModelError,      self.q.add_join, 'Employee.foo', 'inner')
         self.q.add_join('Employee.department', 'inner')
         self.q.add_join('Employee.department.company', 'outer')
@@ -330,24 +330,24 @@ class TestQueryResults(unittest.TestCase):
 
     def testResultsList(self):
         expected = [['foo', 'bar', 'baz'],['quux','fizz','fop']]
-        self.assertEqual(self.query.results(), expected)
-        self.assertEqual(self.template.results(), expected)
+        self.assertEqual(self.query.get_results_list(), expected)
+        self.assertEqual(self.template.get_results_list(), expected)
 
     def testResultsDict(self):
         expected = [
             {'Employee.name':'foo', 'Employee.age':'bar', 'Employee.id':'baz'},
             {'Employee.name':'quux', 'Employee.age':'fizz', 'Employee.id':'fop'}
             ]
-        self.assertEqual(self.query.results("dict"), expected)
-        self.assertEqual(self.template.results("dict"), expected)
+        self.assertEqual(self.query.get_results_list("dict"), expected)
+        self.assertEqual(self.template.get_results_list("dict"), expected)
 
     def testResultsString(self):
         expected = [
             '"foo","bar","baz"\n',
             '"quux","fizz","fop"\n'
             ]
-        self.assertEqual(self.query.results("string"), expected)
-        self.assertEqual(self.template.results("string"), expected)
+        self.assertEqual(self.query.get_results_list("string"), expected)
+        self.assertEqual(self.template.get_results_list("string"), expected)
 
 class TestTemplates(unittest.TestCase):
 
@@ -361,7 +361,7 @@ class TestTemplates(unittest.TestCase):
         expected = "[<TemplateMultiConstraint: Employee.name ONE OF [u'Dick', u'Jane', u'Timmy, the Loyal German-Shepherd'] (editable, locked)>]"
         self.assertEqual(t.editable_constraints.__repr__(), expected)
         expected = [['foo', 'bar', 'baz'],['quux','fizz','fop']]
-        self.assertEqual(t.results(), expected)
+        self.assertEqual(t.get_results_list(), expected)
         try:
             self.service.get_template("Non_Existant")
         except ServiceError as ex:

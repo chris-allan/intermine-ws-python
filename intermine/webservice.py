@@ -231,7 +231,7 @@ class Service(object):
         when they are called to get results. You will not 
         normally need to call it directly
         """
-        rows = self.get_results_iterator(path, params, row, view)
+        rows = self.get_results(path, params, row, view)
         return [r for r in rows]
 
 class ResultIterator(object):
