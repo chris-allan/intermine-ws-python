@@ -2,9 +2,9 @@ import re
 from copy import deepcopy
 from xml.dom import minidom, getDOMImplementation
 
-from intermine.util import openAnything, ReadableException
-from intermine.constraints import *
-from intermine.pathfeatures import PathDescription, Join, SortOrder, SortOrderList
+from .util import openAnything, ReadableException
+from .constraints import *
+from .pathfeatures import PathDescription, Join, SortOrder, SortOrderList
 
 class Query(object):
 

@@ -1,6 +1,7 @@
 from xml.dom import minidom
-from intermine.util import openAnything, ReadableException
 import re
+
+from .util import openAnything, ReadableException
 
 class Class(object):
     """A class representing classes in the Data Model,

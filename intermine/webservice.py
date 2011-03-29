@@ -5,9 +5,9 @@ from urllib import urlencode
 import csv
 
 # Local intermine imports
-from query import Query, Template
-from model import Model
-from util import ReadableException
+from .query import Query, Template
+from .model import Model
+from .util import ReadableException
 
 class Service(object):
     QUERY_PATH         = '/query/results'

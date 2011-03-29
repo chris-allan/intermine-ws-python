@@ -1,7 +1,7 @@
 import re
 import string
-from intermine.pathfeatures import PathFeature, PATH_PATTERN
-from intermine.util import ReadableException
+from .pathfeatures import PathFeature, PATH_PATTERN
+from .util import ReadableException
 
 class Constraint(PathFeature):
     child_type = "constraint"
