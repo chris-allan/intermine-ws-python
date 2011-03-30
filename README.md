@@ -29,13 +29,24 @@ to enable wide-ranging and arbitrary queries.
 Downloading:
 ------------
 
-To download the client library, you will need to use git: 
-You can download a copy of the libray with the following command
+The easiest way to install is to use easy_install:
+
+  sudo easy_install intermine
+
+The source code can be downloaded from a variety of places:
+
+* From InterMine
+
+  wget http://www.intermine.org/lib/python-webservice-client-0.96.00.tar.gz
+
+* From PyPi
+
+  wget http://pypi.python.org/packages/source/i/intermine/intermine-0.96.00.tar.gz
+
+* From Github
 
   git clone git://github.com/alexkalderimis/intermine-ws-python.git
 
-This will download the source code to a directory called intermine-ws-python
-in your current directory.
 
 Running the Tests:
 ------------------
@@ -55,8 +66,14 @@ Once downloaded, you can install the module with the command (from the source di
 Further documentation:
 ----------------------
 
-Please visit http://www.intermine.org/wiki/PythonClient for
-further help and examples.
+Extensive documentation is available by using the "pydoc" command, eg:
+
+  pydoc intermine.query.Query
+
+Also see:
+
+* Documentation on PyPi: http://packages.python.org/intermine/
+* Documentation at InterMine: http://www.intermine.org/wiki/PythonClient
 
 License:
 --------
