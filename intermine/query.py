@@ -7,8 +7,236 @@ from .constraints import *
 from .pathfeatures import PathDescription, Join, SortOrder, SortOrderList
 
 class Query(object):
+    """
+    A Class representing a structured database query
+    ================================================
+    ----------------------------------------------------
+    Objects of this class have properties that model the
+    attributes of the query, and methods for performing
+    the request.
+    ----------------------------------------------------
 
+    SYNOPSIS
+    ----------
+      service = Service("http://www.flymine.org/query/service")
+      query = service.new_query()
+
+      query.add_view("Gene.symbol", "Gene.pathways.name", "Gene.proteins.symbol")
+      query.add_sort_order("Gene.pathways.name")
+
+      query.add_constraint("Gene", "LOOKUP", "eve")
+      query.add_constraint("Gene.pathways.name", "=", "Phosphate*")
+
+      query.set_logic("A or B")
+
+      for row in query.results():
+        handle_row(row)
+        ...
+
+    OVERVIEW
+    -----------
+    
+    Query objects represent structured requests for information over the database
+    housed at the datawarehouse whose webservice you are querying. They utilise 
+    some of the concepts of relational databases, within an object-related 
+    ORM context. If you don't know what that means, don't worry: you
+    don't need to write SQL, and the queries will be fast.
+
+    PRINCIPLES
+    ------------
+    
+    The data model represents tables in the databases as classes, with records
+    within tables as instances of that class. The columns of the database are the
+    fields of that object. 
+
+      The Gene table - showing two records/objects
+      +---------------------------------------------------+
+      | id  | symbol  | length | cyto-location | organism |
+      +----------------------------------------+----------+
+      | 01  | eve     | 1539   | 46C10-46C10   |  01      |
+      +----------------------------------------+----------+
+      | 02  | zen     | 1331   | 84A5-84A5     |  01      |
+      +----------------------------------------+----------+
+      ...
+
+      The organism table - showing one record/object
+      +----------------------------------+
+      | id  | name            | taxon id |
+      +----------------------------------+
+      | 01  | D. melanogaster | 7227     |
+      +----------------------------------+
+    
+    Columns that contain a meaningful value are known as 'attributes' (in the tables above, that is 
+    everything except the id columns). The other columns (such as "organism" in the gene table)
+    are ones that reference records of other tables (ie. other objects), and are called 
+    references. You can refer to any field in any class, that has a connection, 
+    however tenuous, with a table, by using dotted path notation:
+
+      Gene.organism.name -> the name column in the organism table, referenced by a record in the gene table
+
+    These paths, and the connections between records and tables they represent,
+    are the basis for the structure of InterMine queries.
+
+    THE STUCTURE OF A QUERY
+    -----------------------
+
+    A query has two principle sets of properties:
+      - its view: the set of output columns
+      - its constraints: the set of rules for what to include
+
+    A query must have at least one output column in its view, but constraints
+    are optional - if you don't include any, you will get back every record
+    from the table (every object of that type)
+
+    In addition, the query must be coherent: if you have information about
+    an organism, and you want a list of genes, then the "Gene" table
+    should be the basis for your query, and as such the Gene class, which
+    represents this table, should be the root of all the paths that appear in it:
+
+    So, to take a simple example: 
+    
+        I have an organism name, and I want a list of genes:
+
+    The view is the list of things I want to know about those genes:
+
+        query.add_view("Gene.name")
+        query.add_view("Gene.length")
+        query.add_view("Gene.proteins.sequence.length")
+
+    Note I can freely mix attributes and references, as long as every view ends in
+    an attribute (a meaningful value). As a short-cut I can also write:
+
+        query.add_view("Gene.name", "Gene.length", "Gene.proteins.sequence.length")
+
+    or:
+
+        query.add_view("Gene.name Gene.length Gene.proteins.sequence.length") 
+
+    They are all equivalent.
+
+    Now I can add my constraints. As, we mentioned, I have information about an organism:
+
+        query.add_constraint("Gene.organism.name", "=", "D. melanogaster")
+
+    If I run this query, I will get literally millions of results - 
+    it needs to be filtered further:
+
+        query.add_constraint("Gene.proteins.sequence.length", "<", 500)
+    
+    If that doesn't restrict things enough I can add more filters:
+
+        query.add_constraint("Gene.symbol", "ONE OF", ["eve", "zen", "h"])
+
+    Now I am guaranteed to get only information on genes I am interested in. 
+
+    Note, though, that because I have included the link (or "join") from Gene -> Protein,
+    this, by default, means that I only want genes that have protein information associated 
+    with them. If in fact I want information on all genes, and just want to know the 
+    protein information if it is available, then I can specify that with:
+
+        query.add_join("Gene.proteins", "OUTER")
+
+    And if perhaps my query is not as simple as a strict cumulative filter, but I want all 
+    D. mel genes that EITHER have a short protein sequence OR come from one of my favourite genes 
+    (as unlikely as that sounds), I can specify the logic for that too:
+
+        query.set_logic("A and (B or C)")
+
+    Each letter refers to one of the constraints - the codes are assigned in the order you add
+    the constraints. If you want to be absolutely certain about the constraints you mean, you
+    can use the constraint objects themselves:
+
+      gene_is_eve = query.add_constraint("Gene.symbol", "=", "eve")
+      gene_is_zen = query.add_constraint("Gene.symbol", "=", "zne")
+
+      query.set_logic(gene_is_eve | gene_is_zen)
+
+    By default the logic is a straight cumulative filter (ie: A and B and C and D  and ...)
+
+    Putting it all together:
+
+        query.add_view("Gene.name", "Gene.length", "Gene.proteins.sequence.length")
+        query.add_constraint("Gene.organism.name", "=", "D. melanogaster")
+        query.add_constraint("Gene.proteins.sequence.length", "<", 500)
+        query.add_constraint("Gene.symbol", "ONE OF", ["eve", "zen", "h"])
+        query.add_join("Gene.proteins", "OUTER")
+        query.set_logic("A and (B or C)")
+
+    And the query is defined.
+
+    Result Processing
+    ------------------
+
+    calling ".results()" on a query will return an iterator of rows, where each row 
+    is a list of values, one for each field in the output columns (view) you selected.
+
+    To process these simply use normal iteration syntax:
+
+        for row in query.results():
+            for column in row:
+                do_something(column)
+
+    Here each row will have a gene name, a gene length, and a sequence length, eg:
+
+        >>> print row
+        ... ["even skipped", "1359", "376"]
+
+    To make that clearer, you can ask for a dictionary instead of a list:
+
+        >>> for row in query.result("dict")
+                print row
+        ... {"Gene.name":"even skipped","Gene.length":"1359","Gene.proteins.sequence.length":"376"}
+
+    Which means you can refer to columns by name:
+        
+        >>> for row in query.result("dict")
+                print "name is", row["Gene.name"]
+                print "length is", row["Gene.length"]
+
+    If you just want the raw results, for printing to a file, or for piping to another program, 
+    you can request strings instead:
+
+        >>> for row in query.result("string")
+                print(row)
+
+
+    Getting us to Generate your Code 
+    ---------------------------------
+
+    Not that you have to actually write any of this! The webapp will happily
+    generate the code for any query (and template) you can build in it. A good way to get
+    started is to use the webapp to generate your code, and then run it as scripts
+    to speed up your queries. You can always tinker with and edit the scripts you download.
+
+    To get generated queries, look for the "python" link at the bottom of query-builder and
+    template form pages, it looks a bit like this:
+
+    ... +=====================================+=============
+        |                                     |
+        |    Perl  |  Python  |  Java [Help]  |
+        |                                     |
+        +==============================================
+    """
     def __init__(self, model, service=None, validate=True):
+        """
+        Construct a new Query
+        ----------------------
+
+        Construct a new query for making database queries
+        against an InterMine data warehouse. 
+
+        Normally you would not need to use this constructor
+        directly, but instead use the factory method on 
+        intermine.webservice.Service, which will handle construction
+        for you.
+
+        @params:
+            - model: an instance of intermine.model.Model. Required
+            - service: an instance of intermine.service.Service. Optional, 
+                but you will not be able to make requests without one.
+            - validate: a boolean - defaults to True. If set to false, the query
+                will not try and validate itself. You should not set this to false.
+        """
         self.model = model
         self.name = ''
         self.description = ''
@@ -333,27 +561,84 @@ class Query(object):
                 raise QueryError("'" + join.path + "' is not a reference")
 
     def add_path_description(self, *args ,**kwargs):
+        """
+        Add a path description to the query
+        -----------------------------------
+
+          Query.add_path_description(args...)
+
+        If you wish you can add annotations to your query that describe
+        what the component paths are and what they do - this is only really
+        useful if you plan to keep your query (perhaps as xml) or store it
+        as a template.
+        """
         path_description = PathDescription(*args, **kwargs)
         if self.do_verification: self.verify_pd_paths([path_description])
         self.path_descriptions.append(path_description)
         return path_description
 
     def verify_pd_paths(self, pds=None):
+        """
+        Check that the path of the path description is valid
+        ----------------------------------------------------
+
+          Query.verify_pd_paths()
+
+          Will throw: ModelError, if the paths are not valid
+
+        Checks for consistency with the data model
+        """
         if pds is None: pds = self.path_descriptions
         for pd in pds: 
             self.model.validate_path(pd.path, self.get_subclass_dict())
 
     @property
     def coded_constraints(self):
+        """
+        Returns the list of constraints that have a code
+        -------------------------------------------------
+
+          Query.coded_constraints -> list(intermine.constraints.CodedConstraint)
+
+        This returns an up to date list of the constraints that can
+        be used in a logic expression. The only kind of constraint 
+        that this excludes, at present, is SubClassConstraints
+        """
         return sorted(self.constraint_dict.values(), key=lambda con: con.code)
 
     def get_logic(self):
+        """
+        Returns the logic expression for the query
+        ------------------------------------------
+
+          Query.get_logic() -> intermine.constraints.LogicGroup
+
+        This returns the up to date logic expression. The default
+        value is the representation of all coded constraints and'ed together.
+
+        The LogicGroup object stringifies to a string that can be parsed to 
+        obtain itself (eg: "A and (B or C or D)").
+        """
         if self._logic is None:
             return reduce(lambda x, y: x+y, self.coded_constraints)
         else:
             return self._logic
 
     def set_logic(self, value):
+        """
+        Sets the Logic given the appropriate input
+        --------------------------------------------
+
+          Query.set_logic("A and (B or C)")
+
+          May throw: LogicParseError, if there is a syntax error in the logic
+
+        This sets the logic to the appropriate value. If the value is
+        already a LogicGroup, it is accepted, otherwise
+        the string is tokenised and parsed.
+
+        The logic is then validated with a call to validate_logic()
+        """
         if isinstance(value, LogicGroup):
             logic = value
         else: 
@@ -362,6 +647,18 @@ class Query(object):
         self._logic = logic
 
     def validate_logic(self, logic=None):
+        """
+        Validates the query logic
+        --------------------------
+
+          Query.validate_logic()
+
+          Will throw: QueryError, if not every coded constraint is represented
+
+        Attempts to validate the logic by checking
+        that every coded_constraint is included
+        at least once
+        """
         if logic is None: logic = self._logic
         logic_codes = set(logic.get_codes())
         for con in self.coded_constraints:
@@ -370,23 +667,78 @@ class Query(object):
                         + " is not mentioned in the logic: " + str(logic))
 
     def get_default_sort_order(self):
+        """
+        Gets the sort order when none has been specified
+        -------------------------------------------------
+
+          Query.get_default_sort_order() -> intermine.pathfeatures.SortOrderList
+
+          May throw: QueryError, if the view is empty
+
+        This method is called to determine the sort order if
+        none is specified
+        """
         try:
             return SortOrderList((self.views[0], SortOrder.ASC))
         except IndexError:
             raise QueryError("Query view is empty")
 
     def get_sort_order(self):
+        """
+        Return a sort order for the query
+        -----------------------------------
+
+          Query.get_sort_order() -> intermine.pathfeatures.SortOrderList
+
+          May throw: QueryError, if the view is empty
+
+        This method returns the sort order if set, otherwise
+        it returns the default sort order
+        """
         if self._sort_order_list.is_empty():
             return self.get_default_sort_order()         
         else:
             return self._sort_order_list
 
     def add_sort_order(self, path, direction=SortOrder.ASC):
+        """
+        Adds a sort order to the query
+        -------------------------------
+
+          Query.add_sort_order("Gene.name", "DESC")
+
+        This method adds a sort order to the query. 
+        A query can have multiple sort orders, which are 
+        assessed in sequence. 
+        
+        If a query has two sort-orders, for example, 
+        the first being "Gene.organism.name asc",
+        and the second being "Gene.name desc", you would have 
+        the list of genes grouped by organism, with the
+        lists within those groupings in reverse alphabetical
+        order by gene name.
+
+        This method will try to validate the sort order
+        by calling validate_sort_order()
+        """
         so = SortOrder(path, direction)
         if self.do_verification: self.validate_sort_order(so)
         self._sort_order_list.append(so)
 
     def validate_sort_order(self, *so_elems):
+        """
+        Check the validity of the sort order
+        --------------------------------------
+          
+          Query.validate_sort_order()
+
+          Will throw: QueryError, if the sort order is not in the view
+                      ModelError, if the path is invalid
+        
+        Checks that the sort order paths are:
+          - valid paths
+          - in the view
+        """
         if not so_elems:
             so_elems = self._sort_order_list
         
@@ -396,6 +748,24 @@ class Query(object):
                 raise QueryError("Sort order element is not in the view: " + so.path)
 
     def get_subclass_dict(self):
+        """
+        Return the current mapping of class to subclass
+        -----------------------------------------------
+
+          Query.get_subclass_dict() -> dict(String, String)
+
+        This method returns a mapping of classes used 
+        by the model for assessing whether certain paths are valid. For 
+        intance, if you subclass MicroArrayResult to be FlyAtlasResult, 
+        you can refer to the .presentCall attributes of fly atlas results. 
+        MicroArrayResults do not have this attribute, and a path such as:
+
+          Gene.microArrayResult.presentCall
+
+        would be marked as invalid unless the dictionary is provided. 
+
+        Users most likely will not need to ever call this method.
+        """
         subclass_dict = {}
         for c in self.constraints:
             if isinstance(c, SubClassConstraint):
@@ -403,15 +773,52 @@ class Query(object):
         return subclass_dict
 
     def results(self, row="list"):
+        """
+        Return an iterator over result rows
+        -----------------------------------
+
+          Query.results() -> intermine.webservice.ResultIterator
+
+        Usage:
+
+          for row in query.results():
+            do_sth_with(row)
+        
+        You can specify how the row should be handled,
+        the options are: list, dict, string
+        """
         path = self.get_results_path()
         params = self.to_query_params()
         view = self.views
         return self.service.get_results(path, params, row, view)
 
     def get_results_path(self):
+        """
+        Returns the path section pointing to the REST resource
+        ---------------------------------------------------------
+
+          Query.get_results_path() -> str
+
+        Internally, this just calls a constant property
+        in intermine.service.Service
+        """
         return self.service.QUERY_PATH
 
     def get_results_list(self, rowformat="list"):
+        """
+        Get a list of result rows
+        --------------------------
+
+          Query.get_results_list() -> list(list|dict|string)
+
+        This method is a shortcut so that you do not have to
+        do a list comprehension yourself on the iterator that 
+        is normally returned. If you have a very large result 
+        set (in the millions of rows) you will not want to
+        have the whole list in memory at once, but there may 
+        be other circumstances when you might want to keep the whole
+        list in one place.
+        """
         return self.service.get_results_list(
                 self.get_results_path(),
                 self.to_query_params(),
@@ -419,14 +826,45 @@ class Query(object):
                 self.views)
 
     def children(self):
+        """
+        Returns the child objects of the query
+        --------------------------------------
+
+          Query.children() -> list(PathDescription, Join, Constraint)
+
+        This method is used during the serialisation of queries
+        to xml. It is unlikely you will need access to this as a whole.
+        Consider using "path_descriptions", "joins", "constraints" instead
+        """
         return sum([self.path_descriptions, self.joins, self.constraints], [])
         
     def to_query_params(self):
+        """
+        Returns the parameters to be passed to the webservice
+        ------------------------------------------------------
+
+          Query.to_query_params() -> dict(string, string)
+
+        The query is responsible for producing its own query 
+        parameters. These consist simply of:
+         - query: the xml representation of the query
+
+        """
         xml = self.to_xml()
         params = {'query' : xml }
         return params
         
     def to_Node(self):
+        """
+        Returns a DOM node representing the query
+        -----------------------------------------
+
+          Query.to_Node() -> xml.minidom.Node
+
+        This is an intermediate step in the creation of the 
+        xml serialised version of the query. You probably 
+        won't need to call this directly.
+        """
         impl  = getDOMImplementation()
         doc   = impl.createDocument(None, "query", None)
         query = doc.documentElement
@@ -454,13 +892,47 @@ class Query(object):
         return query
 
     def to_xml(self):
+        """
+        Return an XML serialisation of the query
+        -----------------------------------------
+
+          Query.to_xml() -> str
+
+        This method serialises the current state of the query to an 
+        xml string, suitable for storing, or sending over the 
+        internet to the webservice.
+        """
         n = self.to_Node()
         return n.toxml()
     def to_formatted_xml(self):
+        """
+        Return a readable XML serialisation of the query
+        -----------------------------------------
+
+          Query.to_formatted_xml() -> str
+
+        This method serialises the current state of the query to an 
+        xml string, suitable for storing, or sending over the 
+        internet to the webservice, only more readably.
+        """
         n = self.to_Node()
         return n.toprettyxml()
 
     def clone(self):
+        """
+        Performs a deep clone
+        -----------------------
+
+          Query.clone() -> Query
+
+        This method will produce a clone that is independent, 
+        and can be altered without affecting the original, 
+        but starts off with the exact same state as it.
+
+        The only shared elements should be the model
+        and the service, which are shared by all queries 
+        that refer to the same webservice.
+        """
         newobj = self.__class__(self.model)
         for attr in ["joins", "views", "_sort_order_list", "_logic", "path_descriptions", "constraint_dict"]:
             setattr(newobj, attr, deepcopy(getattr(self, attr)))
@@ -470,14 +942,90 @@ class Query(object):
         return newobj
 
 class Template(Query):
+    """
+    A Class representing a predefined query
+    =========================================
+    ----------------------------------------
+    Templates are ways of saving queries 
+    and allowing others to run them 
+    simply. They are the main interface
+    to querying in the webapp
+    ---------------------------------------
+
+    SYNOPSIS
+    -----------
+
+      service = Service("http://www.flymine.org/query/service")
+      template = service.get_template("Gene_Pathways")
+      for row in template.results(A={"value":"eve"}):
+        process_row(row)
+        ...
+
+    OVERVIEW
+    ------------
+
+    A template is a subclass of query that comes predefined. They 
+    are typically retrieved from the webservice and run by specifying
+    the values for their existing constraints. They are a concise 
+    and powerful way of running queries in the webapp.
+
+    Being subclasses of query, everything is true of them that is true
+    of a query. They are just less work, as you don't have to design each
+    one. Also, you can store your own templates in the web-app, and then
+    access them as a private webservice method, from anywhere, making them
+    a kind of query in the cloud - for this you will need to authenticate
+    by providing log in details to the service.
+
+    The most significant difference is how constraint values are specified
+    for each set of results - see Template.results()
+
+    """
     def __init__(self, *args, **kwargs):
+        """
+        Constructor
+        -----------
+
+        Instantiation is identical that of queries. As with queries,
+        these are best obtained from the intermine.webservice.Service
+        factory methods: see intermine.webservice.Service.get_template()
+        """
         super(Template, self).__init__(*args, **kwargs)
         self.constraint_factory = TemplateConstraintFactory()
     @property
     def editable_constraints(self):
+        """
+        Return the list of constraints you can edit
+        --------------------------------------------
+
+          Template.editable_constraints -> list(intermine.constraints.Constraint)
+
+        Templates have a concept of editable constraints, which
+        is a way of hiding complexity from users. An underlying query may have 
+        five constraints, but only expose the one that is actually
+        interesting. This property returns this subset of constraints
+        that have the editable flag set to true.
+        """
         isEditable = lambda x: x.editable
         return filter(isEditable, self.constraints)
+
     def to_query_params(self):
+        """
+        Returns the query parameters needed for the webservice
+        ------------------------------------------------------
+
+          Template.to_query_params() -> dict(string, string)
+
+        Overrides the method of the same name in query to provide the 
+        parameters needed by the templates results service. These
+        are slightly more complex:
+            - name: The template's name
+            - for each constraint: (where [i] is an integer incremented for each constraint)
+                - constraint[i]: the path
+                - op[i]:         the operator
+                - value[i]       the value
+                - code[i]        the code
+                - extra[i]       the extra value for ternary constraints (optional)
+        """
         p = {'name' : self.name}
         i = 1
         for c in self.editable_constraints:
@@ -490,9 +1038,32 @@ class Template(Query):
         return p
 
     def get_results_path(self):
+        """
+        Returns the path section pointing to the REST resource
+        ---------------------------------------------------------
+
+          Template.get_results_path() -> str
+
+        Internally, this just calls a constant property
+        in intermine.service.Service
+
+        This overrides the method of the same name in Query
+        """
         return self.service.TEMPLATEQUERY_PATH
 
     def get_adjusted_template(self, con_values):
+        """
+        Gets a template to run 
+        -----------------------
+
+          Template.get_adjusted_template(con_values) -> Template
+
+        When templates are run, they are first clones, and their 
+        values are changed to those desired. This leaves the original 
+        template unchanged so it can be run again with different
+        values. This method does the cloning and changing of constraint
+        values
+        """
         clone = self.clone()
         for code, options in con_values.items():
             con = clone.get_constraint(code)
@@ -504,10 +1075,50 @@ class Template(Query):
         return clone
 
     def results(self, row="list", **con_values):
+        """
+        Get an iterator over result rows
+        ---------------------------------
+
+          Template.results() -> intermine.webservice.ResultIterator
+
+        This method returns the same values with the 
+        same options as the method of the same name in 
+        Query (see intermine.query.Query). The main difference in in the
+        arguments. 
+
+        The template result methods also accept a key-word pair
+        set of arguments that are used to supply values
+        to the editable constraints. eg:
+
+          template.results(
+            A = {"value": "eve"},
+            B = {"op": ">", "value": 5000}
+          )
+
+        The keys should be codes for editable constraints (you can inspect these
+        with Template.editable_constraints) and the values should be a dictionary
+        of constraint properties to replace. You can replace the values for
+        "op" (operator), "value", and "extra_value" and "values" in the case of 
+        ternary and multi constraints.
+        """
         clone = self.get_adjusted_template(con_values)
         return super(Template, clone).results(row)
 
     def get_results_list(self, row="list", **con_values):
+        """
+        Get a list of result rows
+        ----------------------------
+
+          Template.get_results_list() -> list(list|dict|string)
+
+        This method performs the same as the method of the 
+        same name in Query, and it shares the semantics of 
+        Template.results().
+
+        see: intermine.query.Query.get_results_list()
+        see: intermine.query.Template.results()
+
+        """
         clone = self.get_adjusted_template(con_values)
         return super(Template, clone).get_results_list(row)
 
