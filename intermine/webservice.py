@@ -9,6 +9,20 @@ from .query import Query, Template
 from .model import Model
 from .util import ReadableException
 
+"""
+Webservice Interaction Routines for InterMine Webservices
+=========================================================
+
+Classes for dealing with communication with an InterMine
+RESTful webservice.
+
+"""
+
+__author__ = "Alex Kalderimis"
+__organization__ = "InterMine"
+__license__ = "LGPL"
+__contact__ = "dev@intermine.org"
+
 class Service(object):
     """
     A class representing connections to different InterMine WebServices
@@ -21,6 +35,8 @@ class Service(object):
 
     SYNOPSIS
     --------
+
+    example::
 
       from intermine.webservice import Service
       service = Service("http://www.flymine.org/query/service")
@@ -38,26 +54,26 @@ class Service(object):
         ...
       
     OVERVIEW
-    -----------
+    --------
     The two methods the user will be most concerned with are:
-      - Service.new_query: constructs a new query to query a service with
-      - Service.get_template: gets a template from the service
+      - L{Service.new_query}: constructs a new query to query a service with
+      - L{Service.get_template}: gets a template from the service
 
     TERMINOLOGY
     -----------
-    "Query" is the term for an arbitrarily complex structured request for 
+    X{Query} is the term for an arbitrarily complex structured request for 
     data from the webservice. The user is responsible for specifying the 
     structure that determines what records are returned, and what information
     about each record is provided.
 
-    "Template" is the term for a predefined "Query", ie: one that has been
+    X{Template} is the term for a predefined "Query", ie: one that has been
     written and saved on the webservice you will access. The definition
     of the query is already done, but the user may want to specify the
     values of the constraints that exist on the template. Templates are accessed
     by name, and while you can easily introspect templates, it is assumed
     you know what they do when you use them
 
-    For more information on these two important concepts, see intermine.query
+    @see: L{intermine.query}
     """
     QUERY_PATH         = '/query/results'
     MODEL_PATH         = '/model'
@@ -73,19 +89,21 @@ class Service(object):
     def __init__(self, root, username=None, password=None):
         """
         Constructor
-        ---------------
+        ===========
 
-          Service("http://www.flymine.org/query/service") -> Service
+        Construct a connection to a webservice::
 
-          May throw: ServiceError, if the version cannot be fetched and parsed
-                     ValueError,   if a username is supplied, but no password
+            service = Service("http://www.flymine.org/query/service")
 
-        Construct a connection to a webservice.
+        @param root: the root url of the webservice (required)
+        @param username: your login name (optional)
+        @param password: your password (required if a username is given)
 
-        @params:
-            - root: the root url of the webservice (required)
-            - username: your login name (optional)
-            - password: your password (optional)
+        @raise ServiceError: if the version cannot be fetched and parsed
+        @raise ValueError:   if a username is supplied, but no password
+
+        @return: Service
+
         """
         self.root = root
         self._templates = None
@@ -109,11 +127,11 @@ class Service(object):
     def version(self):
         """
         Returns the webservice version
-        ------------------------------
+        ==============================
 
-          Service.version -> int
+        Service.version S{->} int
             
-          May throw: ServiceError, if the version cannot be fetched
+        May throw: ServiceError, if the version cannot be fetched
 
         The version specifies what capabilities a
         specific webservice provides. The most current 
@@ -130,9 +148,9 @@ class Service(object):
     def release(self):
         """
         Returns the datawarehouse release
-        ---------------------------------
+        =================================
 
-         Service.release -> string
+        Service.release S{->} string
 
         The release is an arbitrary string used to distinguish
         releases of the datawarehouse. This usually coincides
@@ -148,32 +166,35 @@ class Service(object):
     def new_query(self):
         """
         Construct a new Query object for the given webservice
-        -----------------------------------------------------
-
-         Service.new_query() -> intermine.query.Query
+        =====================================================
 
         This is the standard method for instantiating new Query
         objects. Queries require access to the data model, as well
         as the service itself, so it is easiest to access them through
         this factory method.
+
+        @return: L{intermine.query.Query}
         """
         return Query(self.model, self)
 
     def get_template(self, name):
         """
         Returns a template of the given name
-        ------------------------------------
-
-         Service.get_template(name) -> intermine.query.Template
-
-         May throw: ServiceError, if the template does not exist
-                    QueryParseError, if the template cannot be parsed
+        ====================================
 
         Tries to retrieve a template of the given name
         from the webservice. If you are trying to fetch
         a private template (ie. one you made yourself 
         and is not available to others) then you may need to authenticate
-        (see: intermine.service.Service)
+        
+        @see: L{intermine.service.Service.__init__}
+
+        @param name: the template's name as a string
+
+        @raise ServiceError: if the template does not exist
+        @raise QueryParseError: if the template cannot be parsed
+
+        @return: L{intermine.query.Template}
         """
         try:
             t = self.templates[name]
@@ -189,19 +210,21 @@ class Service(object):
     def templates(self):
         """
         The dictionary of templates from the webservice
-        -----------------------------------------------
+        ===============================================
 
-         Service.templates -> dict(intermine.query.Template|string)
+        Service.templates S{->} dict(intermine.query.Template|string)
 
         For efficiency's sake, Templates are not parsed until
         they are required, and until then they are stored as XML
         strings. It is recommended that in most cases you would want 
-        to use Service.get_template.
+        to use L{Service.get_template}.
 
-        You can use this property however to test for template existence though:
+        You can use this property however to test for template existence though::
 
          if name in service.templates:
             template = service.get_template(name)
+
+        @type: dict
 
         """
         if self._templates is None:
@@ -222,51 +245,64 @@ class Service(object):
     def model(self):
         """
         The data model for the webservice you are querying
-        --------------------------------------------------
+        ==================================================
 
-         Service.model -> intermine.model.Model
-
-         May throw: ModelParseError, if the model cannot be read
+        Service.model S{->} L{intermine.model.Model}
 
         This is used when constructing queries to provide them
         with information on the structure of the data model
         they are accessing. You are very unlikely to want to 
         access this object directly.
 
-        see intermine.model.Model
+        raises ModelParseError: if the model cannot be read
+
+        @type: L{intermine.model.Model}
+
         """
         if self._model is None:
             model_url = self.root + self.MODEL_PATH
             self._model = Model(model_url)
         return self._model
 
-    def get_results(self, path, params, row, view):
+    def get_results(self, path, params, rowformat, view):
         """
         Return an Iterator over the rows of the results
-        ------------------------------------------------
-
-         Service.get_results(path, params, rowformat, view)
-           -> intermine.webservice.ResultIterator
+        ===============================================
 
         This method is called internally by the query objects
         when they are called to get results. You will not 
         normally need to call it directly
-        """
-        return ResultIterator(self.root, path, params, row, view, self.opener)
 
-    def get_results_list(self, path, params, row, view):
+        @param path: The resource path (eg: "/query/results")
+        @param params: The query parameters for this request as a dictionary
+        @param rowformat: One of "dict", "list", "string"
+        @param view: The output columns
+
+        @raise WebserviceError: for failed requests
+
+        @return: L{intermine.webservice.ResultIterator}
+        """
+        return ResultIterator(self.root, path, params, rowformat, view, self.opener)
+
+    def get_results_list(self, path, params, rowformat, view):
         """
         Return a list of the rows of the results
-        ------------------------------------------------
-
-         Service.get_results(path, params, rowformat, view)
-           -> list(list|dict|string)
+        ========================================
 
         This method is called internally by the query objects
         when they are called to get results. You will not 
         normally need to call it directly
+
+        @param path: The resource path (eg: "/query/results")
+        @param params: The query parameters for this request as a dictionary
+        @param rowformat: One of "dict", "list", "string"
+        @param view: The output columns
+
+        @raise WebserviceError: for failed requests
+
+        @return: list(list|dict|string)
         """
-        rows = self.get_results(path, params, row, view)
+        rows = self.get_results(path, params, rowformat, view)
         return [r for r in rows]
 
 class ResultIterator(object):
@@ -276,17 +312,20 @@ class ResultIterator(object):
     def __init__(self, root, path, params, rowformat, view, opener):
         """
         Constructor
-        -------------
-           
-           ResultIterator("http://www.somemine.com/service", "/resource/path", 
-                            {params}, "dict", ["col1", "col2"], InterMineURLOpener)
-                -> ResultIterator
-
-            May raise: ValueError, if the row format is not one of the allowed options
-                       WebserviceError, if the request is unsuccessful
+        ===========
 
         Services are responsible for getting result iterators. You will 
         not need to create one manually.
+
+        @param root: The root path (eg: "http://www.flymine.org/query/service")
+        @param path: The resource path (eg: "/query/results")
+        @param params: The query parameters for this request as a dictionary
+        @param rowformat: One of "dict", "list", "string"
+        @param view: The output columns
+        @param opener: A urllib.URLopener object
+
+        @raise ValueError: if the row format is incorrect
+        @raise WebserviceError: if the request is unsuccessful
         """
         if rowformat not in self.ROW_FORMATS:
             raise ValueError("'" + rowformat + "' is not a valid row format:" + self.ROW_FORMATS)
@@ -311,7 +350,7 @@ class ResultIterator(object):
 class InterMineURLOpener(urllib.FancyURLopener):
     """
     Specific implementation of urllib.FancyURLOpener for this client
-    =================================================================
+    ================================================================
 
     Provides user agent and authentication headers, and handling of errors
     """
@@ -320,9 +359,9 @@ class InterMineURLOpener(urllib.FancyURLopener):
     def __init__(self, credentials=None):
         """
         Constructor
-        ------------
+        ===========
 
-          InterMineURLOpener((username, password)) -> InterMineURLOpener
+        InterMineURLOpener((username, password)) S{->} InterMineURLOpener
 
         Return a new url-opener with the appropriate credentials
         """
@@ -342,11 +381,11 @@ class InterMineURLOpener(urllib.FancyURLopener):
     def http_error_400(self, url, fp, errcode, errmsg, headers, data=None):
         """
         Handle 400 HTTP errors, attempting to return informative error messages
-        ---------------------------------------------------------------------
-
-          raises WebserviceError
+        =======================================================================
 
         400 errors indicate that something about our request was incorrect
+
+        @raise WebserviceError: in all circumstances
 
         """
         content = fp.read()
@@ -356,12 +395,13 @@ class InterMineURLOpener(urllib.FancyURLopener):
     def http_error_401(self, url, fp, errcode, errmsg, headers, data=None):
         """
         Handle 401 HTTP errors, attempting to return informative error messages
-        ---------------------------------------------------------------------
-
-          raises WebserviceError
+        =======================================================================
 
         401 errors indicate we don't have sufficient permission for the resource
         we requested - usually a list or a tempate
+
+        @raise WebserviceError: in all circumstances
+
         """
         content = fp.read()
         fp.close()
@@ -373,12 +413,13 @@ class InterMineURLOpener(urllib.FancyURLopener):
     def http_error_404(self, url, fp, errcode, errmsg, headers, data=None):
         """
         Handle 404 HTTP errors, attempting to return informative error messages
-        ---------------------------------------------------------------------
-
-          raises WebserviceError
+        =======================================================================
 
         404 errors indicate that the requested resource does not exist - usually 
         a template that is not longer available.
+
+        @raise WebserviceError: in all circumstances
+
         """
         content = fp.read()
         fp.close()
@@ -386,12 +427,13 @@ class InterMineURLOpener(urllib.FancyURLopener):
     def http_error_500(self, url, fp, errcode, errmsg, headers, data=None):
         """
         Handle 500 HTTP errors, attempting to return informative error messages
-        ---------------------------------------------------------------------
-
-          raises WebserviceError
+        =======================================================================
 
         500 errors indicate that the server borked during the request - ie: it wasn't
         our fault. 
+
+        @raise WebserviceError: in all circumstances
+
         """
         content = fp.read()
         fp.close()

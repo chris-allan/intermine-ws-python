@@ -1,0 +1,780 @@
+<?xml version="1.0" encoding="ascii"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+          "DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <title>intermine.webservice.Service</title>
+  <link rel="stylesheet" href="epydoc.css" type="text/css" />
+  <script type="text/javascript" src="epydoc.js"></script>
+</head>
+
+<body bgcolor="white" text="black" link="blue" vlink="#204080"
+      alink="#204080">
+<!-- ==================== NAVIGATION BAR ==================== -->
+<table class="navbar" border="0" width="100%" cellpadding="0"
+       bgcolor="#a0c0ff" cellspacing="0">
+  <tr valign="middle">
+  <!-- Home link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="intermine-module.html">Home</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Tree link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="module-tree.html">Trees</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Index link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="identifier-index.html">Indices</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Help link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="help.html">Help</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Project homepage -->
+      <th class="navbar" align="right" width="100%">
+        <table border="0" cellpadding="0" cellspacing="0">
+          <tr><th class="navbar" align="center"
+            ><a class="navbar" target="_top" href="http://www.intermine.org">InterMine Python Webservice Client</a></th>
+          </tr></table></th>
+  </tr>
+</table>
+<table width="100%" cellpadding="0" cellspacing="0">
+  <tr valign="top">
+    <td width="100%">
+      <span class="breadcrumbs">
+        <a href="intermine-module.html">Package&nbsp;intermine</a> ::
+        <a href="intermine.webservice-module.html">Module&nbsp;webservice</a> ::
+        Class&nbsp;Service
+      </span>
+    </td>
+    <td>
+      <table cellpadding="0" cellspacing="0">
+        <!-- hide/show private -->
+        <tr><td align="right"><span class="options">[<a href="javascript:void(0);" class="privatelink"
+    onclick="toggle_private();">hide&nbsp;private</a>]</span></td></tr>
+        <tr><td align="right"><span class="options"
+            >[<a href="frames.html" target="_top">frames</a
+            >]&nbsp;|&nbsp;<a href="intermine.webservice.Service-class.html"
+            target="_top">no&nbsp;frames</a>]</span></td></tr>
+      </table>
+    </td>
+  </tr>
+</table>
+<!-- ==================== CLASS DESCRIPTION ==================== -->
+<h1 class="epydoc">Class Service</h1><p class="nomargin-top"><span class="codelink"><a href="intermine.webservice-pysrc.html#Service">source&nbsp;code</a></span></p>
+<pre class="base-tree">
+object --+
+         |
+        <strong class="uidshort">Service</strong>
+</pre>
+
+<hr />
+<h1 class="heading">A class representing connections to different InterMine WebServices</h1>
+    <p>The intermine.webservice.Service class is the main interface for the
+    user. It will provide access to queries and templates, as well as doing
+    the background task of fetching the data model, and actually requesting
+    the query results.</p>
+    <h2 class="heading">SYNOPSIS</h2>
+      <p>example:</p>
+<pre class="literalblock">
+ from intermine.webservice import Service
+ service = Service(&quot;http://www.flymine.org/query/service&quot;)
+
+ template = service.get_template(&quot;Gene_Pathways&quot;)
+ for row in template.results(A={&quot;value&quot;:&quot;zen&quot;}):
+   do_something_with(row)
+   ...
+
+ query = service.new_query()
+ query.add_view(&quot;Gene.symbol&quot;, &quot;Gene.pathway.name&quot;)
+ query.add_constraint(&quot;Gene&quot;, &quot;LOOKUP&quot;, &quot;zen&quot;)
+ for row in query.results():
+   do_something_with(row)
+   ...
+</pre>
+    <h2 class="heading">OVERVIEW</h2>
+      <p>The two methods the user will be most concerned with are:</p>
+      <ul>
+        <li>
+          <a href="intermine.webservice.Service-class.html#new_query" 
+          class="link">Service.new_query</a>: constructs a new query to 
+          query a service with
+        </li>
+        <li>
+          <a href="intermine.webservice.Service-class.html#get_template" 
+          class="link">Service.get_template</a>: gets a template from the 
+          service
+        </li>
+      </ul>
+    <h2 class="heading">TERMINOLOGY</h2>
+      <p><a name="index-Query"></a><i class="indexterm">Query</i> is the 
+      term for an arbitrarily complex structured request for data from the 
+      webservice. The user is responsible for specifying the structure that
+      determines what records are returned, and what information about each
+      record is provided.</p>
+      <p><a name="index-Template"></a><i class="indexterm">Template</i> is 
+      the term for a predefined &quot;Query&quot;, ie: one that has been 
+      written and saved on the webservice you will access. The definition 
+      of the query is already done, but the user may want to specify the 
+      values of the constraints that exist on the template. Templates are 
+      accessed by name, and while you can easily introspect templates, it 
+      is assumed you know what they do when you use them</p>
+
+<hr />
+<div class="fields">      <p><strong>See Also:</strong>
+        <a href="intermine.query-module.html" 
+        class="link">intermine.query</a>
+      </p>
+</div><!-- ==================== INSTANCE METHODS ==================== -->
+<a name="section-InstanceMethods"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td colspan="2" class="table-header">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr valign="top">
+        <td align="left"><span class="table-header">Instance Methods</span></td>
+        <td align="right" valign="top"
+         ><span class="options">[<a href="#section-InstanceMethods"
+         class="privatelink" onclick="toggle_private();"
+         >hide private</a>]</span></td>
+      </tr>
+    </table>
+  </td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="intermine.webservice.Service-class.html#__init__" class="summary-sig-name">__init__</a>(<span class="summary-sig-arg">self</span>,
+        <span class="summary-sig-arg">root</span>,
+        <span class="summary-sig-arg">username</span>=<span class="summary-sig-default">None</span>,
+        <span class="summary-sig-arg">password</span>=<span class="summary-sig-default">None</span>)</span><br />
+      Construct a connection to a webservice:</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="intermine.webservice-pysrc.html#Service.__init__">source&nbsp;code</a></span>
+            
+          </td>
+        </tr>
+      </table>
+      
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="intermine.webservice.Service-class.html#new_query" class="summary-sig-name">new_query</a>(<span class="summary-sig-arg">self</span>)</span><br />
+      This is the standard method for instantiating new Query objects.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="intermine.webservice-pysrc.html#Service.new_query">source&nbsp;code</a></span>
+            
+          </td>
+        </tr>
+      </table>
+      
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="intermine.webservice.Service-class.html#get_template" class="summary-sig-name">get_template</a>(<span class="summary-sig-arg">self</span>,
+        <span class="summary-sig-arg">name</span>)</span><br />
+      Tries to retrieve a template of the given name from the webservice.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_template">source&nbsp;code</a></span>
+            
+          </td>
+        </tr>
+      </table>
+      
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="intermine.webservice.Service-class.html#get_results" class="summary-sig-name">get_results</a>(<span class="summary-sig-arg">self</span>,
+        <span class="summary-sig-arg">path</span>,
+        <span class="summary-sig-arg">params</span>,
+        <span class="summary-sig-arg">rowformat</span>,
+        <span class="summary-sig-arg">view</span>)</span><br />
+      This method is called internally by the query objects when they are 
+      called to get results.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_results">source&nbsp;code</a></span>
+            
+          </td>
+        </tr>
+      </table>
+      
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td><span class="summary-sig"><a href="intermine.webservice.Service-class.html#get_results_list" class="summary-sig-name">get_results_list</a>(<span class="summary-sig-arg">self</span>,
+        <span class="summary-sig-arg">path</span>,
+        <span class="summary-sig-arg">params</span>,
+        <span class="summary-sig-arg">rowformat</span>,
+        <span class="summary-sig-arg">view</span>)</span><br />
+      This method is called internally by the query objects when they are 
+      called to get results.</td>
+          <td align="right" valign="top">
+            <span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_results_list">source&nbsp;code</a></span>
+            
+          </td>
+        </tr>
+      </table>
+      
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" class="summary">
+    <p class="indent-wrapped-lines"><b>Inherited from <code>object</code></b>:
+      <code>__delattr__</code>,
+      <code>__format__</code>,
+      <code>__getattribute__</code>,
+      <code>__hash__</code>,
+      <code>__new__</code>,
+      <code>__reduce__</code>,
+      <code>__reduce_ex__</code>,
+      <code>__repr__</code>,
+      <code>__setattr__</code>,
+      <code>__sizeof__</code>,
+      <code>__str__</code>,
+      <code>__subclasshook__</code>
+      </p>
+    </td>
+  </tr>
+</table>
+<!-- ==================== CLASS VARIABLES ==================== -->
+<a name="section-ClassVariables"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td colspan="2" class="table-header">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr valign="top">
+        <td align="left"><span class="table-header">Class Variables</span></td>
+        <td align="right" valign="top"
+         ><span class="options">[<a href="#section-ClassVariables"
+         class="privatelink" onclick="toggle_private();"
+         >hide private</a>]</span></td>
+      </tr>
+    </table>
+  </td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="QUERY_PATH"></a><span class="summary-name">QUERY_PATH</span> = <code title="'/query/results'"><code class="variable-quote">'</code><code class="variable-string">/query/results</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="MODEL_PATH"></a><span class="summary-name">MODEL_PATH</span> = <code title="'/model'"><code class="variable-quote">'</code><code class="variable-string">/model</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="TEMPLATES_PATH"></a><span class="summary-name">TEMPLATES_PATH</span> = <code title="'/templates/xml'"><code class="variable-quote">'</code><code class="variable-string">/templates/xml</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="TEMPLATEQUERY_PATH"></a><span class="summary-name">TEMPLATEQUERY_PATH</span> = <code title="'/template/results'"><code class="variable-quote">'</code><code class="variable-string">/template/results</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="VERSION_PATH"></a><span class="summary-name">VERSION_PATH</span> = <code title="'/version'"><code class="variable-quote">'</code><code class="variable-string">/version</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="USER_AGENT"></a><span class="summary-name">USER_AGENT</span> = <code title="'WebserviceInterMinePerlAPIClient'"><code class="variable-quote">'</code><code class="variable-string">WebserviceInterMinePerlAPIClient</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="LIST_PATH"></a><span class="summary-name">LIST_PATH</span> = <code title="'/lists/xml'"><code class="variable-quote">'</code><code class="variable-string">/lists/xml</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="SAVEDQUERY_PATH"></a><span class="summary-name">SAVEDQUERY_PATH</span> = <code title="'/savedqueries/xml'"><code class="variable-quote">'</code><code class="variable-string">/savedqueries/xml</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="RELEASE_PATH"></a><span class="summary-name">RELEASE_PATH</span> = <code title="'/version/release'"><code class="variable-quote">'</code><code class="variable-string">/version/release</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a name="SCHEME"></a><span class="summary-name">SCHEME</span> = <code title="'http://'"><code class="variable-quote">'</code><code class="variable-string">http://</code><code class="variable-quote">'</code></code>
+    </td>
+  </tr>
+</table>
+<!-- ==================== PROPERTIES ==================== -->
+<a name="section-Properties"></a>
+<table class="summary" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td colspan="2" class="table-header">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr valign="top">
+        <td align="left"><span class="table-header">Properties</span></td>
+        <td align="right" valign="top"
+         ><span class="options">[<a href="#section-Properties"
+         class="privatelink" onclick="toggle_private();"
+         >hide private</a>]</span></td>
+      </tr>
+    </table>
+  </td>
+</tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a href="intermine.webservice.Service-class.html#version" class="summary-name">version</a><br />
+      Service.version &rarr; int
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">&nbsp;</span>
+    </td><td class="summary">
+        <a href="intermine.webservice.Service-class.html#release" class="summary-name">release</a><br />
+      Service.release &rarr; string
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type">dict</span>
+    </td><td class="summary">
+        <a href="intermine.webservice.Service-class.html#templates" class="summary-name">templates</a><br />
+      Service.templates &rarr; dict(intermine.query.Template|string)
+    </td>
+  </tr>
+<tr>
+    <td width="15%" align="right" valign="top" class="summary">
+      <span class="summary-type"><a href="intermine.model.Model-class.html" 
+      class="link">intermine.model.Model</a></span>
+    </td><td class="summary">
+        <a href="intermine.webservice.Service-class.html#model" class="summary-name">model</a><br />
+      Service.model &rarr; <a href="intermine.model.Model-class.html" 
+      class="link">intermine.model.Model</a>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2" class="summary">
+    <p class="indent-wrapped-lines"><b>Inherited from <code>object</code></b>:
+      <code>__class__</code>
+      </p>
+    </td>
+  </tr>
+</table>
+<!-- ==================== METHOD DETAILS ==================== -->
+<a name="section-MethodDetails"></a>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td colspan="2" class="table-header">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr valign="top">
+        <td align="left"><span class="table-header">Method Details</span></td>
+        <td align="right" valign="top"
+         ><span class="options">[<a href="#section-MethodDetails"
+         class="privatelink" onclick="toggle_private();"
+         >hide private</a>]</span></td>
+      </tr>
+    </table>
+  </td>
+</tr>
+</table>
+<a name="__init__"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">__init__</span>(<span class="sig-arg">self</span>,
+        <span class="sig-arg">root</span>,
+        <span class="sig-arg">username</span>=<span class="sig-default">None</span>,
+        <span class="sig-arg">password</span>=<span class="sig-default">None</span>)</span>
+    <br /><em class="fname">(Constructor)</em>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="intermine.webservice-pysrc.html#Service.__init__">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+  
+  <h1 class="heading">Constructor</h1>
+    <p>Construct a connection to a webservice:</p>
+<pre class="literalblock">
+   service = Service(&quot;http://www.flymine.org/query/service&quot;)
+</pre>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>root</code></strong> - the root url of the webservice (required)</li>
+        <li><strong class="pname"><code>username</code></strong> - your login name (optional)</li>
+        <li><strong class="pname"><code>password</code></strong> - your password (required if a username is given)</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd>Service</dd>
+    <dt>Raises:</dt>
+    <dd><ul class="nomargin-top">
+        <li><code><strong class='fraise'><a href="intermine.webservice.ServiceError-class.html">ServiceError</a></strong></code> - if the version cannot be fetched and parsed</li>
+        <li><code><strong class='fraise'>ValueError</strong></code> - if a username is supplied, but no password</li>
+    </ul></dd>
+    <dt>Overrides:
+        object.__init__
+    </dt>
+  </dl>
+</td></tr></table>
+</div>
+<a name="new_query"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">new_query</span>(<span class="sig-arg">self</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="intermine.webservice-pysrc.html#Service.new_query">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+  
+  <h1 class="heading">Construct a new Query object for the given webservice</h1>
+    <p>This is the standard method for instantiating new Query objects. 
+    Queries require access to the data model, as well as the service 
+    itself, so it is easiest to access them through this factory 
+    method.</p>
+  <dl class="fields">
+    <dt>Returns:</dt>
+        <dd><a href="intermine.query.Query-class.html" 
+          class="link">intermine.query.Query</a></dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="get_template"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">get_template</span>(<span class="sig-arg">self</span>,
+        <span class="sig-arg">name</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_template">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+  
+  <h1 class="heading">Returns a template of the given name</h1>
+    <p>Tries to retrieve a template of the given name from the webservice. 
+    If you are trying to fetch a private template (ie. one you made 
+    yourself and is not available to others) then you may need to 
+    authenticate</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>name</code></strong> - the template's name as a string</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><a href="intermine.query.Template-class.html" 
+          class="link">intermine.query.Template</a></dd>
+    <dt>Raises:</dt>
+    <dd><ul class="nomargin-top">
+        <li><code><strong class='fraise'><a href="intermine.webservice.ServiceError-class.html">ServiceError</a></strong></code> - if the template does not exist</li>
+        <li><code><strong class='fraise'><a href="intermine.query.QueryParseError-class.html">QueryParseError</a></strong></code> - if the template cannot be parsed</li>
+    </ul></dd>
+  </dl>
+<div class="fields">      <p><strong>See Also:</strong>
+        <code class="link">intermine.service.Service.__init__</code>
+      </p>
+</div></td></tr></table>
+</div>
+<a name="get_results"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">get_results</span>(<span class="sig-arg">self</span>,
+        <span class="sig-arg">path</span>,
+        <span class="sig-arg">params</span>,
+        <span class="sig-arg">rowformat</span>,
+        <span class="sig-arg">view</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_results">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+  
+  <h1 class="heading">Return an Iterator over the rows of the results</h1>
+    <p>This method is called internally by the query objects when they are 
+    called to get results. You will not normally need to call it 
+    directly</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>path</code></strong> - The resource path (eg: &quot;/query/results&quot;)</li>
+        <li><strong class="pname"><code>params</code></strong> - The query parameters for this request as a dictionary</li>
+        <li><strong class="pname"><code>rowformat</code></strong> - One of &quot;dict&quot;, &quot;list&quot;, &quot;string&quot;</li>
+        <li><strong class="pname"><code>view</code></strong> - The output columns</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd><a href="intermine.webservice.ResultIterator-class.html" 
+          class="link">intermine.webservice.ResultIterator</a></dd>
+    <dt>Raises:</dt>
+    <dd><ul class="nomargin-top">
+        <li><code><strong class='fraise'><a href="intermine.webservice.WebserviceError-class.html">WebserviceError</a></strong></code> - for failed requests</li>
+    </ul></dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="get_results_list"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <table width="100%" cellpadding="0" cellspacing="0" border="0">
+  <tr valign="top"><td>
+  <h3 class="epydoc"><span class="sig"><span class="sig-name">get_results_list</span>(<span class="sig-arg">self</span>,
+        <span class="sig-arg">path</span>,
+        <span class="sig-arg">params</span>,
+        <span class="sig-arg">rowformat</span>,
+        <span class="sig-arg">view</span>)</span>
+  </h3>
+  </td><td align="right" valign="top"
+    ><span class="codelink"><a href="intermine.webservice-pysrc.html#Service.get_results_list">source&nbsp;code</a></span>&nbsp;
+    </td>
+  </tr></table>
+  
+  <h1 class="heading">Return a list of the rows of the results</h1>
+    <p>This method is called internally by the query objects when they are 
+    called to get results. You will not normally need to call it 
+    directly</p>
+  <dl class="fields">
+    <dt>Parameters:</dt>
+    <dd><ul class="nomargin-top">
+        <li><strong class="pname"><code>path</code></strong> - The resource path (eg: &quot;/query/results&quot;)</li>
+        <li><strong class="pname"><code>params</code></strong> - The query parameters for this request as a dictionary</li>
+        <li><strong class="pname"><code>rowformat</code></strong> - One of &quot;dict&quot;, &quot;list&quot;, &quot;string&quot;</li>
+        <li><strong class="pname"><code>view</code></strong> - The output columns</li>
+    </ul></dd>
+    <dt>Returns:</dt>
+        <dd>list(list|dict|string)</dd>
+    <dt>Raises:</dt>
+    <dd><ul class="nomargin-top">
+        <li><code><strong class='fraise'><a href="intermine.webservice.WebserviceError-class.html">WebserviceError</a></strong></code> - for failed requests</li>
+    </ul></dd>
+  </dl>
+</td></tr></table>
+</div>
+<br />
+<!-- ==================== PROPERTY DETAILS ==================== -->
+<a name="section-PropertyDetails"></a>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr bgcolor="#70b0f0" class="table-header">
+  <td colspan="2" class="table-header">
+    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+      <tr valign="top">
+        <td align="left"><span class="table-header">Property Details</span></td>
+        <td align="right" valign="top"
+         ><span class="options">[<a href="#section-PropertyDetails"
+         class="privatelink" onclick="toggle_private();"
+         >hide private</a>]</span></td>
+      </tr>
+    </table>
+  </td>
+</tr>
+</table>
+<a name="version"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <h3 class="epydoc">version</h3>
+  <h1 class="heading">Returns the webservice version</h1>
+    <p>Service.version &rarr; int</p>
+    <p>May throw: ServiceError, if the version cannot be fetched</p>
+    <p>The version specifies what capabilities a specific webservice 
+    provides. The most current version is 3</p>
+  <dl class="fields">
+    <dt>Get Method:</dt>
+    <dd class="value"><span class="summary-sig"><i>unreachable</i>.version(<span class="summary-sig-arg">self</span>)</span>
+        - Service.version &rarr; int
+    </dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="release"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <h3 class="epydoc">release</h3>
+  <h1 class="heading">Returns the datawarehouse release</h1>
+    <p>Service.release &rarr; string</p>
+    <p>The release is an arbitrary string used to distinguish releases of 
+    the datawarehouse. This usually coincides with updates to the data 
+    contained within. While a string, releases usually sort in ascending 
+    order of recentness (eg: &quot;release-26&quot;, 
+    &quot;release-27&quot;, &quot;release-28&quot;). They can also have 
+    less machine readable meanings (eg: &quot;beta&quot;)</p>
+  <dl class="fields">
+    <dt>Get Method:</dt>
+    <dd class="value"><span class="summary-sig"><i>unreachable</i>.release(<span class="summary-sig-arg">self</span>)</span>
+        - Service.release &rarr; string
+    </dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="templates"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <h3 class="epydoc">templates</h3>
+  <h1 class="heading">The dictionary of templates from the webservice</h1>
+    <p>Service.templates &rarr; dict(intermine.query.Template|string)</p>
+    <p>For efficiency's sake, Templates are not parsed until they are 
+    required, and until then they are stored as XML strings. It is 
+    recommended that in most cases you would want to use <a 
+    href="intermine.webservice.Service-class.html#get_template" 
+    class="link">Service.get_template</a>.</p>
+    <p>You can use this property however to test for template existence 
+    though:</p>
+<pre class="literalblock">
+if name in service.templates:
+   template = service.get_template(name)
+</pre>
+  <dl class="fields">
+    <dt>Get Method:</dt>
+    <dd class="value"><span class="summary-sig"><i>unreachable</i>.templates(<span class="summary-sig-arg">self</span>)</span>
+        - Service.templates &rarr; dict(intermine.query.Template|string)
+    </dd>
+    <dt>Type:</dt>
+      <dd>dict</dd>
+  </dl>
+</td></tr></table>
+</div>
+<a name="model"></a>
+<div>
+<table class="details" border="1" cellpadding="3"
+       cellspacing="0" width="100%" bgcolor="white">
+<tr><td>
+  <h3 class="epydoc">model</h3>
+  <h1 class="heading">The data model for the webservice you are querying</h1>
+    <p>Service.model &rarr; <a href="intermine.model.Model-class.html" 
+    class="link">intermine.model.Model</a></p>
+    <p>This is used when constructing queries to provide them with 
+    information on the structure of the data model they are accessing. You 
+    are very unlikely to want to access this object directly.</p>
+    <p>raises ModelParseError: if the model cannot be read</p>
+  <dl class="fields">
+    <dt>Get Method:</dt>
+    <dd class="value"><span class="summary-sig"><i>unreachable</i>.model(<span class="summary-sig-arg">self</span>)</span>
+        - Service.model &rarr; <a href="intermine.model.Model-class.html" 
+class="link">intermine.model.Model</a>
+    </dd>
+    <dt>Type:</dt>
+      <dd><a href="intermine.model.Model-class.html" 
+      class="link">intermine.model.Model</a></dd>
+  </dl>
+</td></tr></table>
+</div>
+<br />
+<!-- ==================== NAVIGATION BAR ==================== -->
+<table class="navbar" border="0" width="100%" cellpadding="0"
+       bgcolor="#a0c0ff" cellspacing="0">
+  <tr valign="middle">
+  <!-- Home link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="intermine-module.html">Home</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Tree link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="module-tree.html">Trees</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Index link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="identifier-index.html">Indices</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Help link -->
+      <th>&nbsp;&nbsp;&nbsp;<a
+        href="help.html">Help</a>&nbsp;&nbsp;&nbsp;</th>
+
+  <!-- Project homepage -->
+      <th class="navbar" align="right" width="100%">
+        <table border="0" cellpadding="0" cellspacing="0">
+          <tr><th class="navbar" align="center"
+            ><a class="navbar" target="_top" href="http://www.intermine.org">InterMine Python Webservice Client</a></th>
+          </tr></table></th>
+  </tr>
+</table>
+<table border="0" cellpadding="0" cellspacing="0" width="100%%">
+  <tr>
+    <td align="left" class="footer">
+    Generated by Epydoc 3.0.1 on Wed Mar 30 17:15:27 2011
+    </td>
+    <td align="right" class="footer">
+      <a target="mainFrame" href="http://epydoc.sourceforge.net"
+        >http://epydoc.sourceforge.net</a>
+    </td>
+  </tr>
+</table>
+
+<script type="text/javascript">
+  <!--
+  // Private objects are initially displayed (because if
+  // javascript is turned off then we want them to be
+  // visible); but by default, we want to hide them.  So hide
+  // them unless we have a cookie that says to show them.
+  checkCookie();
+  // -->
+</script>
+</body>
+</html>

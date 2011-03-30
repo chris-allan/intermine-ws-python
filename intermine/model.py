@@ -3,29 +3,44 @@ import re
 
 from .util import openAnything, ReadableException
 
+"""
+Classes representing the data model
+===================================
+
+Representations of tables and columns, and behaviour
+for validating connections between them.
+
+"""
+
+__author__ = "Alex Kalderimis"
+__organization__ = "InterMine"
+__license__ = "LGPL"
+__contact__ = "dev@intermine.org"
+
+
+
 class Class(object):
     """
     An abstraction of database tables in the data model
-    ================================================
-    -----------------------------------------------------
+    ===================================================
+
     These objects refer to the table objects in the
     InterMine ORM layer.
-    -----------------------------------------------------
 
     SYNOPSIS
-    ---------
+    --------
 
-    service = Service("http://www.flymine.org/query/service")
-    model = service.model
-
-    if "Gene" in model.classes:
-        gene_cd = model.get_class("Gene")
-        print "Gene has", len(gene_cd.fields), "fields"
-        for field in gene_cd.fields:
-            print " - ", field.name
+    >>>  service = Service("http://www.flymine.org/query/service")
+    >>>  model = service.model
+    >>>
+    >>>  if "Gene" in model.classes:
+    ...      gene_cd = model.get_class("Gene")
+    ...      print "Gene has", len(gene_cd.fields), "fields"
+    ...      for field in gene_cd.fields:
+    ...          print " - ", field.name
 
     OVERVIEW
-    ---------
+    --------
 
     Each class can have attributes (columns) of various types,
     and can have references to other classes (tables), on either
@@ -38,12 +53,16 @@ class Class(object):
     def __init__(self, name, parents):
         """
         Constructor - Creates a new Class descriptor
-        ------------
+        ============================================
 
-          Class(name, [parent1, parent2]) -> Class
+        >>> cd = intermine.model.Class("Gene", ["SequenceFeature"])
+        <intermine.model.Class: Gene>
 
         This constructor is called when deserialising the 
         model - you should have no need to create Classes by hand
+
+        @param name: The name of this class
+        @param parents: a list of parental names
 
         """
         self.name = name
@@ -60,41 +79,56 @@ class Class(object):
     def fields(self):
         """
         The fields of this class
-        ------------------------
-
-          Class.fields -> list(Field)
+        ========================
 
         The fields are returned sorted by name. Fields
         includes all Attributes, References and Collections
+
+        @type: list(L{Field})
         """
         return sorted(self.field_dict.values(), key=lambda field: field.name)
 
     @property
     def attributes(self):
-        """The fields of this class which contain data"""
+        """
+        The fields of this class which contain data
+        ===========================================
+
+        @type: list(L{Attribute})
+        """
         return filter(lambda x: isinstance(x, Attribute), self.fields)
 
     @property
     def references(self):
-        """fields which reference other objects"""
+        """
+        fields which reference other objects
+        ====================================
+
+        @type: list(L{Reference})
+        """
         def isRef(x): return isinstance(x, Reference) and not isinstance(x, Collection)
         return filter(isRef, self.fields)
 
     @property
     def collections(self):
-        """fields which reference many other objects"""
+        """
+        fields which reference many other objects
+        =========================================
+
+        @type: list(L{Collection})
+        """
         return filter(lambda x: isinstance(x, Collection), self.fields)
 
     def get_field(self, name):
         """
         Get a field by name
-        --------------------
-
-          Class.get_field(name) -> Field
-
-          May throw: ModelError, if the Class does not have such a field
+        ===================
 
         The standard way of retrieving a field
+
+        @raise ModelError: if the Class does not have such a field
+
+        @rtype: subclass of L{intermine.model.Field}
         """
         if name in self.field_dict:
             return self.field_dict[name]
@@ -104,15 +138,15 @@ class Class(object):
     def isa(self, other):
         """
         Check if self is, or inherits from other
-        ----------------------------------------
-
-          Class.isa(other) -> boolean
+        ========================================
 
         This method validates statements about inheritance. 
         Returns true if the "other" is, or is within the 
         ancestry of, this class
 
         Other can be passed as a name (str), or as the class object itself
+
+        @rtype: boolean
         """
         if isinstance(other, Class):
             other_name = other.name
@@ -131,23 +165,21 @@ class Class(object):
 class Field(object):
     """
     A class representing columns on database tables
-    =================================================
-    --------------------------------------------------------------
+    ===============================================
+
     The base class for attributes, references and collections. All
     columns in DB tables are represented by fields
-    ---------------------------------------------------------------
 
     SYNOPSIS
-    ---------
+    --------
 
         >>> service = Service("http://www.flymine.org/query/service")
-            model = service.model
-            cd = model.get_class("Gene")
-            print "Gene has", len(cd.fields), "fields"
-            for field in gene_cd.fields:
-                print " - ", field
-
-        ... Gene has 45 fields
+        >>> model = service.model
+        >>> cd = model.get_class("Gene")
+        >>> print "Gene has", len(cd.fields), "fields"
+        >>> for field in gene_cd.fields:
+        ...        print " - ", field
+        Gene has 45 fields
             -  CDSs is a group of CDS objects, which link back to this as gene
             -  GLEANRsymbol is a String
             -  UTRs is a group of UTR objects, which link back to this as gene
@@ -168,25 +200,25 @@ class Field(object):
             -  length is a Integer
             ...
       
-    see also: Attrubute, Reference, Collection
+    @see: L{Attribute} 
+    @see: L{Reference}
+    @see: L{Collection}
     """
     def __init__(self, name, type_name, class_origin):
         """
         Constructor - DO NOT USE
-        -----------------------------
+        ========================
 
-          THIS CLASS IS NOT MEANT TO BE INSTANTIATED DIRECTLY
-            - use Attribute, Reference or Collection instead
+        THIS CLASS IS NOT MEANT TO BE INSTANTIATED DIRECTLY
             
-        And even then, you are unlikely to need to do 
+        you are unlikely to need to do 
         so anyway: it is recommended you access fields
         through the classes generated by the model
 
-        @params:
-            - name: The name of this field (str)
-            - type_name: the type of field (eg: String, CDS,...) (str)
-            - class_origin: The class this field belongs to originally 
-                (it may be inherited later) (Class)
+        @param name: The name of the reference
+        @param type_name: The name of the model.Class this refers to
+        @param class_origin: The model.Class this was declared in
+
         """
         self.name = name
         self.type_name = type_name
@@ -201,16 +233,16 @@ class Field(object):
 class Attribute(Field):
     """
     Attributes represent columns that contain actual data
-    =======================================================
+    =====================================================
 
-    The Attribute class inherits all the behaviour of Field
+    The Attribute class inherits all the behaviour of L{intermine.model.Field}
     """
     pass
 
 class Reference(Field):
     """
     References represent columns that refer to records in other tables
-    ====================================================================
+    ==================================================================
     
     In addition the the behaviour and properties of Field, references
     may also have a reverse reference, if the other record points 
@@ -220,15 +252,27 @@ class Reference(Field):
     def __init__(self, name, type_name, class_origin, reverse_ref=None):
         """
         Constructor
-        -------------
+        ===========
 
         In addition to the a parameters of Field, Reference also 
         takes an optional reverse reference name (str)
+
+        @param name: The name of the reference
+        @param type_name: The name of the model.Class this refers to
+        @param class_origin: The model.Class this was declared in
+        @param reverse_ref: The name of the reverse reference (default: None)
+
         """
         self.reverse_reference_name = reverse_ref
         super(Reference, self).__init__(name, type_name, class_origin)
         self.reverse_reference = None
     def toString(self):
+        """
+        Return a string representation
+        ==============================
+
+        @rtype: str
+        """
         s = super(Reference, self).toString()
         if self.reverse_reference is None:
             return s
@@ -238,11 +282,12 @@ class Reference(Field):
 class Collection(Reference):
     """
     Collections are references which refer to groups of objects
-    ============================================================
+    ===========================================================
 
     Collections have all the same behaviour and properties as References
     """
     def toString(self):
+        """Return a string representation"""
         ret = super(Collection, self).toString().replace(" is a ", " is a group of ")
         if self.reverse_reference is None:
             return ret + " objects"
@@ -253,10 +298,12 @@ class Collection(Reference):
 class Path(object):
     """
     A class representing a validated dotted string path
-    =====================================================
+    ===================================================
+
+    A path represents a connection between records and fields
 
     SYNOPSIS
-    ----------
+    --------
 
         >>> service = Service("http://www.flymine.org/query/service")
             model = service.model
@@ -272,7 +319,7 @@ class Path(object):
         ... <intermine.model.Class: gene>
 
     OVERVIEW
-    ---------
+    --------
 
     This class is used for performing validation on dotted path strings. 
     The simple act of parsing it into existence will validate the path
@@ -281,18 +328,20 @@ class Path(object):
     """
     def __init__(self, path_string, model, subclasses={}):
         """
-        Constructor:
-        -------------
+        Constructor
+        ===========
 
-          Path("Gene.name", model) -> Path
+          >>> path = Path("Gene.name", model)
 
         You will not need to use this constructor directly. Instead,
         use the "make_path" method on the model to construct paths for you.
         
-        @params:
-            - path_string: the dotted path string (eg: Gene.proteins.name)
-            - model: the model to validate the path against
-            - subclasses: a dict which maps subclasses (defaults to an empty dict)
+        @param path_string: the dotted path string (eg: Gene.proteins.name)
+        @type path_string: str
+        @param model: the model to validate the path against
+        @type model: L{Model}
+        @param subclasses: a dict which maps subclasses (defaults to an empty dict)
+        @type subclasses: dict
         """
         self._string = path_string
         self.parts = model.parse_path_string(path_string, subclasses)
@@ -305,12 +354,20 @@ class Path(object):
 
     @property
     def end(self):
-        """The descriptor for the last part of the string."""
+        """
+        The descriptor for the last part of the string.
+        
+        @type: Class|Field
+        """
         return self.parts[-1]
 
     def get_class(self):
-        """Return the class object for this path, if it refers to a class
-        or a reference. Attribute paths return None"""
+        """
+        Return the class object for this path, if it refers to a class
+        or a reference. Attribute paths return None
+        
+        @rtype: L{model.Class}
+        """
         if self.is_class():
             return self.end
         elif self.is_reference():
@@ -319,33 +376,47 @@ class Path(object):
             return None
     
     def is_reference(self):
-        """Return true if the path is a reference, eg: Gene.organism or Gene.proteins
-        Note: Collections are ALSO references"""
+        """
+        Return true if the path is a reference, eg: Gene.organism or Gene.proteins
+        Note: Collections are ALSO references
+        
+        @rtype: boolean
+        """
         return isinstance(self.end, Reference)
 
     def is_class(self):
-        """Return true if the path just refers to a class, eg: Gene"""
+        """
+        Return true if the path just refers to a class, eg: Gene
+        
+        @rtype: boolean
+        """
         return isinstance(self.end, Class)
 
     def is_attribute(self):
-        """Return true if the path refers to an attribute, eg: Gene.length"""
+        """
+        Return true if the path refers to an attribute, eg: Gene.length
+        
+        @rtype: boolean
+        """
         return isinstance(self.end, Attribute)
 
 class Model(object):
     """
     A class for representing the data model of an InterMine datawarehouse
-    =======================================================================
+    =====================================================================
+
+    An abstraction of the database schema
 
     SYNOPSIS
-    ----------
+    --------
 
         >>> service = Service("http://www.flymine.org/query/service")
-            model = service.model
-            model.get_class("Gene")
-        ... <intermine.model.Class: Gene>
+        >>> model = service.model
+        >>> model.get_class("Gene")
+        <intermine.model.Class: Gene>
 
     OVERVIEW
-    -----------
+    --------
 
     This class represents the data model  - ie. an abstraction
     of the database schema. It can be used to introspect what 
@@ -354,17 +425,16 @@ class Model(object):
     def __init__(self, source):
         """
         Constructor
-        ------------
+        ===========
 
-          Model(xml) -> Model
+          >>> model = Model(xml)
 
         You will most like not need to create a model directly, 
         instead get one from the Service object:
         
-        see: intermine.webservice.Service
+        @see: L{intermine.webservice.Service}
 
-        @params:
-            - source -- the model.xml, as a local file, string, or url
+        @param source: the model.xml, as a local file, string, or url
         """
         assert source is not None
         self.source = source
@@ -375,15 +445,14 @@ class Model(object):
     def parse_model(self, source):
         """
         Create classes, attributes, references and collections from the model.xml
-        --------------------------------------------------------------------------
-
-            Model.parse_model(source)
-
-            May throw: ModelParseError, if there is a problem parsing the source
+        =========================================================================
 
         The xml can be provided as a file, url or string. This method
         is called during instantiation - it does not need to be called 
         directly.
+
+        @param source:  the model.xml, as a local file, string, or url
+        @raise ModelParseError: if there is a problem parsing the source
         """
         try:
             io = openAnything(source)
@@ -426,15 +495,13 @@ class Model(object):
     def vivify(self):
         """
         Make names point to instances and insert inherited fields
-        ----------------------------------------------------------
+        =========================================================
         
-          Model.vivify()
-
-          May throw: ModelError, if the names point to non-existent objects
-
         This method ensures the model is internally consistent. This method
         is called during instantiaton. It does not need to be called
         directly.
+
+        @raise ModelError: if the names point to non-existent objects
         """
         for c in self.classes.values():
             c.parent_classes = self.to_ancestry(c)
@@ -449,11 +516,13 @@ class Model(object):
     def to_ancestry(self, cd):
         """
         Returns the lineage of the class
-        -----------------------------------
+        ================================
         
-            Model.to_ancestry(cd) -> list(classes)
+            >>> classes = Model.to_ancestry(cd)
 
         Returns the class' parents, and all the class' parents' parents
+
+        @rtype: list(L{intermine.model.Class})
         """
         parents = cd.parents
         def defined(x): return x is not None # weeds out the java classes
@@ -466,30 +535,38 @@ class Model(object):
     def to_classes(self, classnames):
         """
         take a list of class names and return a list of classes
-        --------------------------------------------------------
+        =======================================================
 
-            model.to_classes(list(classnames)) -> list(classes)
-
-            May throw: ModelError, if the classnames point to non-existent classes
+            >>> classes = model.to_classes(["Gene", "Protein", "Organism"])
 
         This simply maps from a list of strings to a list of 
         classes in the calling model.
+
+        @raise ModelError: if the list of class names includes ones that don't exist
+
+        @rtype: list(L{intermine.model.Class})
         """
         return map(self.get_class, classnames)
 
     def get_class(self, name):
         """
         Get a class by its name, or by a dotted path
-        -----------------------------------------------
+        ============================================
 
-            Model.get_class(name) -> class
-
-            May throw: ModelError, if the class does not exist
+            >>> model = Model("http://www.flymine.org/query/service/model")
+            >>> model.get_class("Gene")
+            <intermine.model.Class: Gene>
+            >>> model.get_class("Gene.proteins")
+            <intermine.model.Class: Protein>
 
         This is the recommended way of retrieving a class from
         the model. As well as handling class names, you can also
         pass in a path such as "Gene.proteins" and get the 
         corresponding class back (<intermine.model.Class: Protein>)
+
+        @raise ModelError: if the class name refers to a non-existant object
+
+        @rtype: L{intermine.model.Class}
         """
         if name.find(".") != -1:
             path = self.make_path(name)
@@ -505,30 +582,41 @@ class Model(object):
     def make_path(self, path, subclasses={}):
         """
         Return a path object for the given path string
-        -----------------------------------------------
+        ==============================================
 
-            Model.make_path(string) -> Path
+            >>> path = Model.make_path("Gene.organism.name")
+            <intermine.model.Path: Gene.organism.name>
 
         This is recommended manner of constructing path objects.
 
-        see: intermine.model.Path
+        @type path: str
+        @type subclasses: dict
+
+        @raise PathParseError: if there is a problem parsing the path string
+
+        @rtype: L{intermine.model.Path}
         """
         return Path(path, self, subclasses)
 
     def validate_path(self, path_string, subclasses={}):
         """
         Validate a path
-        ---------------------
-            
-            Model.validate_path(string) -> Bool
-            
-            will throw: PathParseError, for invalid paths
+        ===============
+
+            >>> try:
+            ...     model.validate_path("Gene.symbol")
+            ...     return "path is valid"
+            ... except PathParseError:
+            ...     return "path is invalid"
+            "path is valid"
 
         When you don't need to interrogate relationships
         between paths, simply using this method to validate
         a path string is enough. It guarantees that there
         is a descriptor for each section of the string, 
         with the appropriate relationships
+
+        @raise PathParseError: if there is a problem parsing the path string
         """
         try:
             self.parse_path_string(path_string, subclasses)
@@ -540,17 +628,17 @@ class Model(object):
     def parse_path_string(self, path_string, subclasses={}):
         """
         Parse a path string into a list of descriptors - one for each section
-        -----------------------------------------------------------------------
+        =====================================================================
     
-            Model.parse_path_string(string) -> list(descriptors)
+            >>> parts = Model.parse_path_string(string)
 
         This method is used when making paths from a model, and 
         when validating path strings. It probably won't need to 
         be called directly.
 
-        see: intermine.model.Model.make_path
-        see: intermine.model.Model.validate_path
-        see: intermine.model.Path
+        @see: L{intermine.model.Model.make_path}
+        @see: L{intermine.model.Model.validate_path}
+        @see: L{intermine.model.Path}
         """
         descriptors = []
         names = path_string.split('.')
