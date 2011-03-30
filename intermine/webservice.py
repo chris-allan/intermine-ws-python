@@ -1,8 +1,8 @@
 from urlparse import urlunsplit, urljoin
 from xml.dom import minidom
-from urllib import urlopen
-from urllib import urlencode 
+import urllib
 import csv
+import base64
 
 # Local intermine imports
 from .query import Query, Template
@@ -70,26 +70,61 @@ class Service(object):
     RELEASE_PATH       = '/version/release'
     SCHEME             = 'http://'
 
-    def __init__(self, root):
+    def __init__(self, root, username=None, password=None):
+        """
+        Constructor
+        ---------------
+
+          Service("http://www.flymine.org/query/service") -> Service
+
+          May throw: ServiceError, if the version cannot be fetched and parsed
+                     ValueError,   if a username is supplied, but no password
+
+        Construct a connection to a webservice.
+
+        @params:
+            - root: the root url of the webservice (required)
+            - username: your login name (optional)
+            - password: your password (optional)
+        """
         self.root = root
         self._templates = None
         self._model = None
         self._version = None
         self._release = None
+        if username:
+            if not password:
+                raise ValueError("No password supplied")
+            self.opener = InterMineURLOpener((username, password))
+        else:
+            self.opener = InterMineURLOpener()
+
+# This works in the real world, but not in testing...
+#       try:
+#           self.version
+#       except ServiceError:
+#           raise ServiceError("Could not validate service - is the root url correct?")
+
     @property
     def version(self):
         """
         Returns the webservice version
         ------------------------------
 
-         Service.version -> int
+          Service.version -> int
+            
+          May throw: ServiceError, if the version cannot be fetched
 
         The version specifies what capabilities a
         specific webservice provides. The most current 
         version is 3
         """
         if self._version is None:
-            self._version = int(urlopen(self.root + self.VERSION_PATH).read())
+            try:
+                url = self.root + self.VERSION_PATH
+                self._version = int(self.opener.open(url).read())
+            except ValueError:
+                raise ServiceError("Could not parse a valid webservice version")
         return self._version
     @property
     def release(self):
@@ -107,7 +142,7 @@ class Service(object):
         have less machine readable meanings (eg: "beta")
         """
         if self._release is None:
-            self._release = urlopen(self.root + RELEASE_PATH).read()
+            self._release = urllib.urlopen(self.root + RELEASE_PATH).read()
         return self._release
 
     def new_query(self):
@@ -170,7 +205,7 @@ class Service(object):
 
         """
         if self._templates is None:
-            sock = urlopen(self.root + self.TEMPLATES_PATH)
+            sock = urllib.urlopen(self.root + self.TEMPLATES_PATH)
             dom = minidom.parse(sock)
             sock.close()
             templates = {}
@@ -217,7 +252,7 @@ class Service(object):
         when they are called to get results. You will not 
         normally need to call it directly
         """
-        return ResultIterator(self.root, path, params, row, view)
+        return ResultIterator(self.root, path, params, row, view, self.opener)
 
     def get_results_list(self, path, params, row, view):
         """
@@ -236,12 +271,30 @@ class Service(object):
 
 class ResultIterator(object):
     
-    def __init__(self, root, path, params, rowformat, view):
+    ROW_FORMATS = frozenset(["string", "list", "dict"])
+
+    def __init__(self, root, path, params, rowformat, view, opener):
+        """
+        Constructor
+        -------------
+           
+           ResultIterator("http://www.somemine.com/service", "/resource/path", 
+                            {params}, "dict", ["col1", "col2"], InterMineURLOpener)
+                -> ResultIterator
+
+            May raise: ValueError, if the row format is not one of the allowed options
+                       WebserviceError, if the request is unsuccessful
+
+        Services are responsible for getting result iterators. You will 
+        not need to create one manually.
+        """
+        if rowformat not in self.ROW_FORMATS:
+            raise ValueError("'" + rowformat + "' is not a valid row format:" + self.ROW_FORMATS)
+
         params.update({"format" : "csv"})
-        u = root + path
-        p = urlencode(params)
-        u += "?" + p
-        con = urlopen(u)
+        url  = root + path
+        data = urllib.urlencode(params)
+        con = opener.open(url + "?" + data)
         self.reader = {
             "string" : lambda: con,
             "list"   : lambda: csv.reader(con),
@@ -252,7 +305,101 @@ class ResultIterator(object):
         return self.reader
 
     def next(self):
+        """Returns the next row, in the appropriate format"""
         return self.reader.next()
 
+class InterMineURLOpener(urllib.FancyURLopener):
+    """
+    Specific implementation of urllib.FancyURLOpener for this client
+    =================================================================
+
+    Provides user agent and authentication headers, and handling of errors
+    """
+    version = "InterMine-Python-Client-0.96.00"
+
+    def __init__(self, credentials=None):
+        """
+        Constructor
+        ------------
+
+          InterMineURLOpener((username, password)) -> InterMineURLOpener
+
+        Return a new url-opener with the appropriate credentials
+        """
+        urllib.FancyURLopener.__init__(self)
+        if credentials and len(credentials) == 2:
+            base64string = base64.encodestring('%s:%s' % credentials)[:-1]
+            auth_header = "Basic %s" % base64string
+            self.addheader("Authorization", auth_header)
+            self.using_authentication = True
+
+    def http_error_default(self, url, fp, errcode, errmsg, headers):
+        """Re-implementation of http_error_default, with content now supplied by default"""
+        content = fp.read()
+        fp.close()
+        raise WebserviceError(errcode, errmsg, content)
+
+    def http_error_400(self, url, fp, errcode, errmsg, headers, data=None):
+        """
+        Handle 400 HTTP errors, attempting to return informative error messages
+        ---------------------------------------------------------------------
+
+          raises WebserviceError
+
+        400 errors indicate that something about our request was incorrect
+
+        """
+        content = fp.read()
+        fp.close()
+        raise WebserviceError("There was a problem with our request", errcode, errmsg, content)
+
+    def http_error_401(self, url, fp, errcode, errmsg, headers, data=None):
+        """
+        Handle 401 HTTP errors, attempting to return informative error messages
+        ---------------------------------------------------------------------
+
+          raises WebserviceError
+
+        401 errors indicate we don't have sufficient permission for the resource
+        we requested - usually a list or a tempate
+        """
+        content = fp.read()
+        fp.close()
+        if self.using_authentication:
+            raise WebserviceError("Insufficient permissions", errcode, errmsg, content)
+        else:
+            raise WebserviceError("No permissions - not logged in", errcode, errmsg, content)
+
+    def http_error_404(self, url, fp, errcode, errmsg, headers, data=None):
+        """
+        Handle 404 HTTP errors, attempting to return informative error messages
+        ---------------------------------------------------------------------
+
+          raises WebserviceError
+
+        404 errors indicate that the requested resource does not exist - usually 
+        a template that is not longer available.
+        """
+        content = fp.read()
+        fp.close()
+        raise WebserviceError("Missing resource", errcode, errmsg, content)
+    def http_error_500(self, url, fp, errcode, errmsg, headers, data=None):
+        """
+        Handle 500 HTTP errors, attempting to return informative error messages
+        ---------------------------------------------------------------------
+
+          raises WebserviceError
+
+        500 errors indicate that the server borked during the request - ie: it wasn't
+        our fault. 
+        """
+        content = fp.read()
+        fp.close()
+        raise WebserviceError("Internal server error", errcode, errmsg, content)
+
 class ServiceError(ReadableException):
+    """Errors in the creation and use of the Service object"""
+    pass
+class WebserviceError(IOError):
+    """Errors from interaction with the webservice"""
     pass
