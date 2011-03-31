@@ -42,6 +42,11 @@ class CleanCommand(Command):
             for f in files:
                 if f.endswith('.pyc'):
                     self._clean_me.append(pjoin(root, f))
+        for root, dirs, files in os.walk(pjoin('build')):
+            for f in files:
+                self._clean_me.append(pjoin(root, f))
+            for d in dirs:
+                self._clean_me.append(pjoin(root, d))
 
     def finalize_options(self):
         pass
