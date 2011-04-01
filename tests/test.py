@@ -1,19 +1,12 @@
-import threading
-import SimpleHTTPServer
 import time
 import unittest
 
-from ..model import *
-from ..webservice import *
-from ..query import *
-from ..constraints import *
+from intermine.model import *
+from intermine.webservice import *
+from intermine.query import *
+from intermine.constraints import *
 
-class ServerThread( threading.Thread ):
-    def __init__(self):
-        super(ServerThread, self).__init__()
-        self.daemon = True
-    def run(self):
-        SimpleHTTPServer.test()
+from testserver import TestServer
 
 class TestInstantiation(unittest.TestCase): 
 
@@ -392,7 +385,8 @@ class TestTemplates(unittest.TestCase):
          
 
 if __name__ == '__main__':
-    server = ServerThread()
+    server = TestServer()
     server.start()
     time.sleep(0.1) # Avoid race conditions with the server
     unittest.main()
+    server.shutdown()
