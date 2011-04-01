@@ -4,35 +4,51 @@ http://da44en.wordpress.com/2002/11/22/using-distutils/
 """
 
 from distutils.core import Command, setup
+from distutils import log
+from distutils.fancy_getopt import fancy_getopt
 from unittest import TextTestRunner, TestLoader
 from glob import glob
 from os.path import splitext, basename, join as pjoin, walk
 from warnings import warn
 import os
+from tests.testserver import TestServer
+from tests.test import WebserviceTest
 
 class TestCommand(Command):
-    user_options = [ ]
+    user_options = [('verbose', 'v', "produce verbose output", 1)]
 
     def initialize_options(self):
         self._dir = os.getcwd()
 
     def finalize_options(self):
-        pass
+        args, obj = fancy_getopt(self.user_options, {}, None, None)
+        # Ugly as sin, but distutils forced me to do it :(
+        # All I wanted was this command to default to quiet...
+        if "--verbose" not in args and "-v" not in args:
+            self.verbose = 0
 
     def run(self):
         '''
         Finds all the tests modules in tests/, and runs them.
         '''
+
+        log.set_verbosity(self.verbose)
+
+        server = TestServer()
+        server.start()
+        WebserviceTest.TEST_PORT = server.port
+
         testfiles = [ ]
         for t in glob(pjoin(self._dir, 'tests', '*.py')):
             if not t.endswith('__init__.py'):
                 testfiles.append('.'.join(
                     ['tests', splitext(basename(t))[0]])
                 )
+        testfiles = [ "tests.test" ]
 
-        print testfiles
+        self.announce("Test files:" + str(testfiles), level=2)
         tests = TestLoader().loadTestsFromNames(testfiles)
-        t = TextTestRunner(verbosity = 1)
+        t = TextTestRunner(verbosity = self.verbose)
         t.run(tests)
 
 class CleanCommand(Command):
@@ -67,17 +83,25 @@ class CleanCommand(Command):
 
     def run(self):
         for clean_me in self._files_to_delete:
-            try:
-                os.unlink(clean_me)
-            except Exception as e:
-                message = " ".join(["Failed to delete file", clean_me, str(e)])
-                warn(message)
+            if self.dry_run:
+                log.info("Would have unlinked " + clean_me)
+            else:
+                try:
+                    os.unlink(clean_me)
+                except Exception as e:
+                    message = " ".join(["Failed to delete file", clean_me, str(e)])
+                    log.warn(message)
         for clean_me in self._dirs_to_delete:
-            try:
-                os.rmdir(clean_me)
-            except Exception as e:
-                message = " ".join(["Failed to delete dir", clean_me, str(e)])
-                warn(message)
+            if self.dry_run:
+                log.info("Would have rmdir'ed " + clean_me)
+            else:
+                if os.path.exists(clean_me):
+                    try:
+                        os.rmdir(clean_me)
+                    except Exception as e:
+                        message = " ".join(
+                                ["Failed to delete dir", clean_me, str(e)])
+                        log.warn(message)
 
 setup(
         name = "intermine",
