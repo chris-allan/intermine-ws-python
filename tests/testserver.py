@@ -32,6 +32,9 @@ class SilentRequestHandler(SimpleHTTPRequestHandler):
         if not self.silent:
             SimpleHTTPRequestHandler.log_message(self, *args)
 
+    def do_POST(self):
+        self.do_GET()
+
 class TestServer( threading.Thread ):
     def __init__(self, daemonise=True, silent=True):
         super(TestServer, self).__init__()
@@ -48,6 +51,8 @@ class TestServer( threading.Thread ):
 
         SilentRequestHandler.protocol_version = protocol
         SilentRequestHandler.silent = self.silent
+        if not self.silent:
+            print "Starting", protocol, "server on port", self.port
         httpd = HTTPServer(server_address, SilentRequestHandler)
 
         sa = httpd.socket.getsockname()
@@ -56,7 +61,6 @@ class TestServer( threading.Thread ):
 
 if __name__ == '__main__':
     server = TestServer(silent=False)
-    print "Starting server on port", server.port
     server.start()
     for number in range(1, 20):
         time.sleep(2)

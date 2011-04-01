@@ -8,10 +8,18 @@ from intermine.constraints import *
 
 from testserver import TestServer
 
-class TestInstantiation(unittest.TestCase): 
+class WebserviceTest(unittest.TestCase):
+    TEST_PORT = 8000
+
+    @classmethod
+    def get_test_root(cls):
+        return "http://localhost:" + str(WebserviceTest.TEST_PORT) + "/testservice/service"
+
+class TestInstantiation(WebserviceTest): 
 
     def testMakeModel(self):
-        m = Model("http://localhost:8000/intermine/testservice/service/model")
+        """Should be about to make a model, or fail with an appropriate message"""
+        m = Model(self.get_test_root() + "/model")
         self.assertTrue(isinstance(m, Model), "Can make a model")
         try:
             bad_m = Model("foo")
@@ -19,19 +27,20 @@ class TestInstantiation(unittest.TestCase):
             self.assertEqual(ex.message, "Error parsing model")
 
     def testMakeService(self):
-        s = Service("http://localhost:8000/intermine/testservice/service")
+        """Should be able to make a Service"""
+        s = Service(self.get_test_root())
         self.assertTrue(isinstance(s, Service), "Can make a service")
 
-class TestModel(unittest.TestCase):
+class TestModel(WebserviceTest):
 
     model = None
 
     def setUp(self):
         if self.model is None: 
-            self.model = Model("http://localhost:8000/intermine/testservice/service/model")
+            self.__class__.model = Model(self.get_test_root() + "/model")
 
     def testModelClasses(self):
-        '''The model should have the correct number of classes'''
+        '''The model should have the correct number of classes, which behave correctly'''
         self.assertEqual(len(self.model.classes.items()), 19)
         for good_class in ["Employee", "Company", "Department"]:
             cd = self.model.get_class(good_class)
@@ -49,6 +58,7 @@ class TestModel(unittest.TestCase):
                     "'Foo' is not a class in this model")
         try: 
             self.model.get_class("Employee.name")
+            self.fail("No ModelError thrown at bad class retrieval")
         except ModelError as ex:
             self.assertEqual(ex.message, "'Employee.name' is not a class")
 
@@ -67,42 +77,45 @@ class TestModel(unittest.TestCase):
                 "There is no field called foo in CEO")
 
     def testFieldTypes(self):
+        '''The fields should be of the appropriate type'''
         dep = self.model.get_class("Department")
         self.assertTrue(isinstance(dep.get_field("name"), Attribute))
         self.assertTrue(isinstance(dep.get_field("employees"), Collection))
         self.assertTrue(isinstance(dep.get_field("company"), Reference))
 
-class TestService(unittest.TestCase):
-
-    ROOT = "http://localhost:8000/intermine/testservice/service"
+class TestService(WebserviceTest):
      
     def setUp(self):
-        self.s = Service(TestService.ROOT)
+        self.s = Service(self.get_test_root())
 
     def testRoot(self):
-        self.assertEqual(TestService.ROOT, self.s.root, "it has the right root")
+        """The service should have the right root"""
+        self.assertEqual(self.get_test_root(), self.s.root, "it has the right root")
 
     def testQueryMaking(self):
+        """The service should be able to make a query"""
         q = self.s.new_query()
         self.assertTrue(isinstance(q, Query), "Can make a query")
         self.assertEqual(q.model.name, "testmodel", "and it has the right model")
 
-class TestQuery(unittest.TestCase):
+class TestQuery(WebserviceTest):
 
     model = None
     expected_unary = '[<UnaryConstraint: Employee.age IS NULL>, <UnaryConstraint: Employee.name IS NOT NULL>]'
     expected_binary = '[<BinaryConstraint: Employee.age > 50000>, <BinaryConstraint: Employee.name = John>, <BinaryConstraint: Employee.end != 0>]'
     expected_multi = "[<MultiConstraint: Employee.name ONE OF ['Tom', 'Dick', 'Harry']>, <MultiConstraint: Manager.name NONE OF ['Sue', 'Jane', 'Helen']>]"
     expected_list = "[<ListConstraint: Employee IN my-list>, <ListConstraint: Manager NOT IN my-list>]"
+    expected_loop = '[<LoopConstraint: Employee IS Employee.department.manager>, <LoopConstraint: CEO IS NOT CEO.company.departments.employees>]' 
     expected_ternary = '[<TernaryConstraint: Employee LOOKUP Susan>, <TernaryConstraint: Employee.department.manager LOOKUP John IN Wernham-Hogg>]'
     expected_subclass = "[<SubClassConstraint: Department.employees ISA Manager>]"
 
     def setUp(self):
         if self.model is None:
-            self.__class__.model = Model("http://localhost:8000/intermine/testservice/service/model") 
+            self.__class__.model = Model(self.get_test_root() + "/model")
         self.q = Query(self.model)
 
     def testAddViews(self):
+        """Should be able to add legal views, and complain about illegal ones"""
         self.q.add_view("Employee.age")
         self.q.add_view("Employee.name", "Employee.department.company.name")
         self.q.add_view("Employee.department.name Employee.department.company.vatNumber")
@@ -120,6 +133,7 @@ class TestQuery(unittest.TestCase):
             self.assertEqual(ex.message, "'Employee.department' does not represent an attribute")
 
     def testSortOrder(self):
+        """Should be able to add sort orders, and complain appropriately"""
         self.q.add_view("Employee.name", "Employee.age", "Employee.fullTime")
         self.assertEqual(str(self.q.get_sort_order()), "Employee.name asc")
         self.q.add_sort_order("Employee.fullTime", "desc")
@@ -132,17 +146,20 @@ class TestQuery(unittest.TestCase):
 
 
     def testConstraintPathProblems(self):
+        """Queries should not add constraints with bad paths to themselves"""
         try:
             self.q.add_constraint('Foo', 'IS NULL')
         except ModelError as ex:
             self.assertEqual(ex.message, "'Foo' is not a class in this model")
 
     def testUnaryConstraints(self):
+        """Queries should be fine with NULL/NOT NULL constraints"""
         self.q.add_constraint('Employee.age', 'IS NULL')
         self.q.add_constraint('Employee.name', 'IS NOT NULL')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_unary)
 
     def testAddBinaryConstraints(self):
+        """Queries should be able to handle constraints on attribute values"""
         self.q.add_constraint('Employee.age', '>', 50000)
         self.q.add_constraint('Employee.name', '=', 'John')
         self.q.add_constraint('Employee.end', '!=', 0)
@@ -153,25 +170,36 @@ class TestQuery(unittest.TestCase):
             self.assertEqual(ex.message, "'Department.company' does not represent an attribute")
 
     def testTernaryConstraint(self):
+        """Queries should be able to add constraints for LOOKUPs"""
         self.q.add_constraint('Employee', 'LOOKUP', 'Susan')
         self.q.add_constraint('Employee.department.manager', 'LOOKUP', 'John', 'Wernham-Hogg')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_ternary)
         try:
             self.q.add_constraint('Department.company.name', 'LOOKUP', "foo")
+            self.fail("No ConstraintError thrown at bad LOOKUP constraint")
         except ConstraintError as ex:
             self.assertEqual(ex.message, "'Department.company.name' does not represent a class, or a reference to a class")
 
     def testMultiConstraint(self):
+        """Queries should be ok with multi-value constraints"""
         self.q.add_constraint('Employee.name', 'ONE OF', ['Tom', 'Dick', 'Harry'])
         self.q.add_constraint('Manager.name', 'NONE OF', ['Sue', 'Jane', 'Helen'])
         self.assertEqual(self.q.constraints.__repr__(), self.expected_multi)
 
     def testListConstraint(self):
+        """Queries should be ok with list constraints"""
         self.q.add_constraint('Employee', 'IN', 'my-list')
         self.q.add_constraint('Manager', 'NOT IN', 'my-list')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_list)
 
+    def testLoopConstraint(self):
+        """Queries should be ok with loop constraints"""
+        self.q.add_constraint('Employee', 'IS', 'Employee.department.manager')
+        self.q.add_constraint('CEO', 'IS NOT', 'CEO.company.departments.employees')
+        self.assertEqual(self.q.constraints.__repr__(), self.expected_loop)
+
     def testSubclassConstraints(self):
+        """Queries should be ok with sub class constraints"""
         self.q.add_constraint('Department.employees', 'Manager')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_subclass)
         try:
@@ -184,6 +212,7 @@ class TestQuery(unittest.TestCase):
             self.assertEqual(ex.message, "'Manager' is not a subclass of 'Department.company.CEO'")
 
     def testLogic(self):
+        """Queries should be able to parse good logic strings"""
         self.q.add_constraint("Employee.name", "IS NOT NULL")
         self.q.add_constraint("Employee.age", ">", 10)
         self.q.add_constraint("Employee.department", "LOOKUP", "Sales", "Wernham-Hogg")
@@ -215,16 +244,19 @@ class TestQuery(unittest.TestCase):
         self.assertEqual(expected, self.q.joins.__repr__())
 
     def testXML(self):
+        """Should be able to serialise queries to XML"""
         self.q.add_view("Employee.name", "Employee.age", "Employee.department.name")
         self.q.add_constraint("Employee.name", "IS NOT NULL")
         self.q.add_constraint("Employee.age", ">", 10)
         self.q.add_constraint("Employee.department", "LOOKUP", "Sales", "Wernham-Hogg")
         self.q.add_constraint("Employee.department.employees.name", "ONE OF", 
             ["John", "Paul", "Mary"])
+        self.q.add_constraint("Employee.department.manager", "IS", "Employee")
+        self.q.add_constraint("Employee", "IN", "some list of employees")
         self.q.add_constraint("Employee.department.employees", "Manager")
         self.q.add_join("Employee.department", "outer")
         self.q.add_sort_order("Employee.age")
-        self.q.set_logic("(A and B) or (A and C and D)")
+        self.q.set_logic("(A and B) or (A and C and D) and (E or F)")
         expected = '<query constraintLogic="(A and B) or (A and C and D)" longDescription="" model="testmodel" name="" sortOrder="Employee.age asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
         self.assertEqual(expected, self.q.to_xml())
 
@@ -236,15 +268,16 @@ class TestTemplate(TestQuery):
     expected_ternary = '[<TemplateTernaryConstraint: Employee LOOKUP Susan (editable, locked)>, <TemplateTernaryConstraint: Employee.department.manager LOOKUP John IN Wernham-Hogg (editable, locked)>]'
     expected_subclass = '[<TemplateSubClassConstraint: Department.employees ISA Manager (editable, locked)>]'
     expected_list = "[<TemplateListConstraint: Employee IN my-list (editable, locked)>, <TemplateListConstraint: Manager NOT IN my-list (editable, locked)>]"
+    expected_loop = '[<TemplateLoopConstraint: Employee IS Employee.department.manager (editable, locked)>, <TemplateLoopConstraint: CEO IS NOT CEO.company.departments.employees (editable, locked)>]'
 
     def setUp(self):
         super(TestTemplate, self).setUp()
         self.q = Template(self.model)
 
-class TestQueryResults(unittest.TestCase):
+class TestQueryResults(WebserviceTest):
 
     model = None
-    service = Service("http://localhost:8000/intermine/testservice/service")
+    service = None
 
     class MockService(object):
         
@@ -256,8 +289,11 @@ class TestQueryResults(unittest.TestCase):
             return args
     
     def setUp(self):
+        if self.service is None:
+            self.__class__.service = Service(WebserviceTest.get_test_root())
         if self.model is None:
-            self.__class__.model = Model("http://localhost:8000/intermine/testservice/service/model") 
+            self.__class__.model = Model(self.get_test_root() + "/model")
+
         q = Query(self.model, self.service)
         q.add_view("Employee.name", "Employee.age", "Employee.id")
         self.query = q
@@ -268,6 +304,7 @@ class TestQueryResults(unittest.TestCase):
         self.template = t
 
     def testURLs(self):
+        """Should be able to produce the right information for opening urls"""
         q = Query(self.model, self.MockService())
         q.add_view("Employee.name", "Employee.age", "Employee.id")
         q.add_constraint("Employee.name", '=', "Fred")
@@ -329,32 +366,45 @@ class TestQueryResults(unittest.TestCase):
         self.assertEqual(expected1, t.results()) 
 
     def testResultsList(self):
+        """Should be able to get results as one list per row"""
         expected = [['foo', 'bar', 'baz'],['quux','fizz','fop']]
-        self.assertEqual(self.query.get_results_list(), expected)
-        self.assertEqual(self.template.get_results_list(), expected)
+        try:
+            self.assertEqual(self.query.get_results_list(), expected)
+            self.assertEqual(self.template.get_results_list(), expected)
+        except IOError as e:
+            raise self.failureException("Error connecting to " + self.query.service.root)
 
     def testResultsDict(self):
+        """Should be able to get results as one dictionary per row"""
         expected = [
             {'Employee.name':'foo', 'Employee.age':'bar', 'Employee.id':'baz'},
             {'Employee.name':'quux', 'Employee.age':'fizz', 'Employee.id':'fop'}
             ]
-        self.assertEqual(self.query.get_results_list("dict"), expected)
-        self.assertEqual(self.template.get_results_list("dict"), expected)
+        try:
+            self.assertEqual(self.query.get_results_list("dict"), expected)
+            self.assertEqual(self.template.get_results_list("dict"), expected)
+        except IOError as e:
+            raise self.failureException("Error connecting to " + self.query.service.root)
 
     def testResultsString(self):
+        """Should be able to get results as one string per row"""
         expected = [
             '"foo","bar","baz"\n',
             '"quux","fizz","fop"\n'
             ]
-        self.assertEqual(self.query.get_results_list("string"), expected)
-        self.assertEqual(self.template.get_results_list("string"), expected)
+        try:
+            self.assertEqual(self.query.get_results_list("string"), expected)
+            self.assertEqual(self.template.get_results_list("string"), expected)
+        except IOError as e:
+            raise self.failureException("Error connecting to " + self.query.service.root)
 
-class TestTemplates(unittest.TestCase):
+class TestTemplates(WebserviceTest):
 
     def setUp(self):
-        self.service = Service("http://localhost:8000/intermine/testservice/service")
+        self.service = Service(self.get_test_root())
 
     def testGetTemplate(self):
+        """Should be able to get a template from the webservice, if it exists"""
         self.assertEqual(len(self.service.templates), 12)
         t = self.service.get_template("MultiValueConstraints")
         self.assertTrue(isinstance(t, Template))
@@ -368,6 +418,7 @@ class TestTemplates(unittest.TestCase):
             self.assertEqual(ex.message, "There is no template called 'Non_Existant' at this service")
     
     def testTemplateConstraintParsing(self):
+        """Should be able to parse template constraints"""
         t = self.service.get_template("UneditableConstraints")
         self.assertEqual(len(t.constraints), 2)
         self.assertEqual(len(t.editable_constraints), 1)
