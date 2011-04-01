@@ -72,6 +72,7 @@ class TestModel(WebserviceTest):
 
         try:
             ceo.get_field("foo")
+            self.fail("No ModelError thown at bad field name")
         except ModelError as ex:
             self.assertEqual(ex.message, 
                 "There is no field called foo in CEO")
@@ -115,7 +116,7 @@ class TestQuery(WebserviceTest):
         self.q = Query(self.model)
 
     def testAddViews(self):
-        """Should be able to add legal views, and complain about illegal ones"""
+        """Queries should be able to add legal views, and complain about illegal ones"""
         self.q.add_view("Employee.age")
         self.q.add_view("Employee.name", "Employee.department.company.name")
         self.q.add_view("Employee.department.name Employee.department.company.vatNumber")
@@ -129,11 +130,12 @@ class TestQuery(WebserviceTest):
         self.assertEqual(self.q.views, expected)
         try: 
             self.q.add_view("Employee.name", "Employee.age", "Employee.department")
+            self.fail("No ConstraintError thrown at bad view element")
         except ConstraintError as ex:
             self.assertEqual(ex.message, "'Employee.department' does not represent an attribute")
 
     def testSortOrder(self):
-        """Should be able to add sort orders, and complain appropriately"""
+        """Queries should be able to add sort orders, and complain appropriately"""
         self.q.add_view("Employee.name", "Employee.age", "Employee.fullTime")
         self.assertEqual(str(self.q.get_sort_order()), "Employee.name asc")
         self.q.add_sort_order("Employee.fullTime", "desc")
@@ -149,6 +151,7 @@ class TestQuery(WebserviceTest):
         """Queries should not add constraints with bad paths to themselves"""
         try:
             self.q.add_constraint('Foo', 'IS NULL')
+            self.fail("No ModelError thrown at bad path name")
         except ModelError as ex:
             self.assertEqual(ex.message, "'Foo' is not a class in this model")
 
@@ -166,6 +169,7 @@ class TestQuery(WebserviceTest):
         self.assertEqual(self.q.constraints.__repr__(), self.expected_binary)
         try:
             self.q.add_constraint('Department.company', '=', "foo")
+            self.fail("No ConstraintError thrown at non-attribute path")
         except ConstraintError as ex:
             self.assertEqual(ex.message, "'Department.company' does not represent an attribute")
 
@@ -185,6 +189,7 @@ class TestQuery(WebserviceTest):
         self.q.add_constraint('Employee.name', 'ONE OF', ['Tom', 'Dick', 'Harry'])
         self.q.add_constraint('Manager.name', 'NONE OF', ['Sue', 'Jane', 'Helen'])
         self.assertEqual(self.q.constraints.__repr__(), self.expected_multi)
+        self.assertRaises(TypeError, self.q.add_constraint, "Employee.name", "ONE OF", "Tom, Dick, Harry")
 
     def testListConstraint(self):
         """Queries should be ok with list constraints"""
@@ -197,6 +202,8 @@ class TestQuery(WebserviceTest):
         self.q.add_constraint('Employee', 'IS', 'Employee.department.manager')
         self.q.add_constraint('CEO', 'IS NOT', 'CEO.company.departments.employees')
         self.assertEqual(self.q.constraints.__repr__(), self.expected_loop)
+        self.assertRaises(ConstraintError, self.q.add_constraint, "Employee", "IS", "Employee.department")
+        self.assertRaises(ConstraintError, self.q.add_constraint, "Company", "IS", "Company.CEO")
 
     def testSubclassConstraints(self):
         """Queries should be ok with sub class constraints"""
@@ -204,10 +211,12 @@ class TestQuery(WebserviceTest):
         self.assertEqual(self.q.constraints.__repr__(), self.expected_subclass)
         try:
            self.q.add_constraint('Department.company.CEO', 'Foo')
+           self.fail("No ModelError raised by bad sub class")
         except ModelError as ex:
             self.assertEqual(ex.message, "'Foo' is not a class in this model")
         try:
             self.q.add_constraint('Department.company.CEO', 'Manager')
+            self.fail("No ConstraintError raised by bad subclass relationship")
         except ConstraintError as ex:
             self.assertEqual(ex.message, "'Manager' is not a subclass of 'Department.company.CEO'")
 
@@ -235,6 +244,7 @@ class TestQuery(WebserviceTest):
         self.assertRaises(LogicParseError, self.q.set_logic, "A and (B and C and )D")
 
     def testJoins(self):
+        """Queries should be able to add joins"""
         self.assertRaises(TypeError,       self.q.add_join, 'Employee.department', 'foo')
         self.assertRaises(QueryError, self.q.add_join, 'Employee.age', 'inner')
         self.assertRaises(ModelError,      self.q.add_join, 'Employee.foo', 'inner')
@@ -244,7 +254,7 @@ class TestQuery(WebserviceTest):
         self.assertEqual(expected, self.q.joins.__repr__())
 
     def testXML(self):
-        """Should be able to serialise queries to XML"""
+        """Queries should be able to serialise themselves to XML"""
         self.q.add_view("Employee.name", "Employee.age", "Employee.department.name")
         self.q.add_constraint("Employee.name", "IS NOT NULL")
         self.q.add_constraint("Employee.age", ">", 10)
@@ -257,7 +267,7 @@ class TestQuery(WebserviceTest):
         self.q.add_join("Employee.department", "outer")
         self.q.add_sort_order("Employee.age")
         self.q.set_logic("(A and B) or (A and C and D) and (E or F)")
-        expected = '<query constraintLogic="(A and B) or (A and C and D)" longDescription="" model="testmodel" name="" sortOrder="Employee.age asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint path="Employee.department.employees" type="Manager"/></query>'
+        expected ='<query constraintLogic="((A and B) or (A and C and D)) and (E or F)" longDescription="" model="testmodel" name="" sortOrder="Employee.age asc" view="Employee.name Employee.age Employee.department.name"><join path="Employee.department" style="OUTER"/><constraint code="A" op="IS NOT NULL" path="Employee.name"/><constraint code="B" op="&gt;" path="Employee.age" value="10"/><constraint code="C" extraValue="Wernham-Hogg" op="LOOKUP" path="Employee.department" value="Sales"/><constraint code="D" op="ONE OF" path="Employee.department.employees.name"><value>John</value><value>Paul</value><value>Mary</value></constraint><constraint code="E" loopPath="Employee" op="IS" path="Employee.department.manager"/><constraint code="F" op="IN" path="Employee" value="some list of employees"/><constraint path="Employee.department.employees" type="Manager"/></query>'        
         self.assertEqual(expected, self.q.to_xml())
 
 class TestTemplate(TestQuery):
@@ -372,7 +382,7 @@ class TestQueryResults(WebserviceTest):
             self.assertEqual(self.query.get_results_list(), expected)
             self.assertEqual(self.template.get_results_list(), expected)
         except IOError as e:
-            raise self.failureException("Error connecting to " + self.query.service.root)
+            raise RuntimeError("Error connecting to " + self.query.service.root)
 
     def testResultsDict(self):
         """Should be able to get results as one dictionary per row"""
@@ -384,7 +394,7 @@ class TestQueryResults(WebserviceTest):
             self.assertEqual(self.query.get_results_list("dict"), expected)
             self.assertEqual(self.template.get_results_list("dict"), expected)
         except IOError as e:
-            raise self.failureException("Error connecting to " + self.query.service.root)
+            raise RuntimeError("Error connecting to " + self.query.service.root)
 
     def testResultsString(self):
         """Should be able to get results as one string per row"""
@@ -396,7 +406,7 @@ class TestQueryResults(WebserviceTest):
             self.assertEqual(self.query.get_results_list("string"), expected)
             self.assertEqual(self.template.get_results_list("string"), expected)
         except IOError as e:
-            raise self.failureException("Error connecting to " + self.query.service.root)
+            raise RuntimeError("Error connecting to " + self.query.service.root)
 
 class TestTemplates(WebserviceTest):
 
@@ -414,6 +424,7 @@ class TestTemplates(WebserviceTest):
         self.assertEqual(t.get_results_list(), expected)
         try:
             self.service.get_template("Non_Existant")
+            self.fail("No ServiceError raised by non-existant template")
         except ServiceError as ex:
             self.assertEqual(ex.message, "There is no template called 'Non_Existant' at this service")
     
