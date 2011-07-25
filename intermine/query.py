@@ -4,6 +4,7 @@ from xml.dom import minidom, getDOMImplementation
 
 from .util import openAnything, ReadableException
 from .pathfeatures import PathDescription, Join, SortOrder, SortOrderList
+from .model import Column, Class
 import constraints
 
 """
@@ -47,12 +48,32 @@ class Query(object):
        >>>
        >>> for row in query.results():
        ...     handle_row(row)
+
+    OR, using an SQL style DSL:
+
+        >>> s = Service("www.flymine.org/query") 
+        >>> query = s.query("Gene").\
+        ...           select("*", "pathways.*").\
+        ...           where("symbol", "=", "H").\
+        ...           outerjoin("pathways").\
+        ...           order_by("symbol")
+        >>> for row in query.results():
+        ...     handle_row(row)
+
+    OR, for a more SQL-alchemy, ORM style: 
+
+        >>>
+        >>> for gene in s.query(s.model.Gene).filter(s.model.Gene.symbol == ["zen", "H", "eve"]).add_columns(s.model.Gene.alleles):
+        ...    handle(gene)
     
     Query objects represent structured requests for information over the database
     housed at the datawarehouse whose webservice you are querying. They utilise 
     some of the concepts of relational databases, within an object-related 
     ORM context. If you don't know what that means, don't worry: you
     don't need to write SQL, and the queries will be fast.
+
+    To make things slightly more familiar to those with knowledge of SQL, some syntactical
+    sugar is provided to make constructing queries a bit more recognisable.
 
     PRINCIPLES
     ----------
@@ -118,17 +139,24 @@ class Query(object):
     Note I can freely mix attributes and references, as long as every view ends in
     an attribute (a meaningful value). As a short-cut I can also write:
 
-        >>> query.add_view("Gene.name", "Gene.length", "Gene.proteins.sequence.length")
+        >>> query.add_views("Gene.name", "Gene.length", "Gene.proteins.sequence.length")
 
     or:
 
-        >>> query.add_view("Gene.name Gene.length Gene.proteins.sequence.length") 
+        >>> query.add_views("Gene.name Gene.length Gene.proteins.sequence.length") 
 
-    They are all equivalent.
+    They are all equivalent. You can also use common SQL style shortcuts such as "*" for all 
+    attribute fields:
+
+        >>> query.add_views("Gene.*")
+
+    You can also use "select" as a synonymn for "add_view"
 
     Now I can add my constraints. As, we mentioned, I have information about an organism, so:
 
         >>> query.add_constraint("Gene.organism.name", "=", "D. melanogaster")
+
+    (note, here I can use "where" as a synonymn for "add_constraint")
 
     If I run this query, I will get literally millions of results - 
     it needs to be filtered further:
@@ -174,15 +202,36 @@ class Query(object):
        >>> query.add_join("Gene.proteins", "OUTER")
        >>> query.set_logic("A and (B or C)")
 
+    This can be made more concise and readable with a little DSL sugar:
+
+        >>> query = service.query("Gene")
+        >>> query.select("name", "length", "proteins.sequence.length").\
+        ...       where('organism.name' '=', 'D. melanogaster').\
+        ...       where("proteins.sequence.length", "<", 500).\
+        ...       where('symbol', 'ONE OF', ['eve', 'h', 'zen']).\
+        ...       outerjoin('proteins').\
+        ...       set_logic("A and (B or C)")
+
     And the query is defined.
 
     Result Processing
     -----------------
 
     calling ".results()" on a query will return an iterator of rows, where each row 
-    is a list of values, one for each field in the output columns (view) you selected.
+    is a ResultRow object, which can be treated as both a list and a dictionary.
 
-    To process these simply use normal iteration syntax:
+    Which means you can refer to columns by name:
+        
+        >>> for row in query.results():
+        ...     print "name is %s" % (row["name"])
+        ...     print "length is %d" % (row["length"])
+
+    As well as using list indices:
+
+        >>> for row in query.results():
+        ...     print "The first column is %s" % (row[0])
+
+    Iterating over a row iterates over the cell values as a list:
 
         >>> for row in query.results():
         ...     for column in row:
@@ -190,20 +239,15 @@ class Query(object):
 
     Here each row will have a gene name, a gene length, and a sequence length, eg:
 
-        >>> print row
+        >>> print row.to_l
         ["even skipped", "1359", "376"]
 
     To make that clearer, you can ask for a dictionary instead of a list:
 
-        >>> for row in query.result("dict")
-        ...       print row
+        >>> for row in query.result()
+        ...       print row.to_d
         {"Gene.name":"even skipped","Gene.length":"1359","Gene.proteins.sequence.length":"376"}
 
-    Which means you can refer to columns by name:
-        
-        >>> for row in query.result("dict")
-        ...     print "name is", row["Gene.name"]
-        ...     print "length is", row["Gene.length"]
 
     If you just want the raw results, for printing to a file, or for piping to another program, 
     you can request strings instead:
@@ -230,7 +274,7 @@ class Query(object):
         +==============================================
 
     """
-    def __init__(self, model, service=None, validate=True):
+    def __init__(self, model, service=None, validate=True, root=None):
         """
         Construct a new Query
         =====================
@@ -251,6 +295,11 @@ class Query(object):
 
         """
         self.model = model
+        if root is None:
+            self.root = root
+        else:
+            self.root = model.make_path(root).root
+
         self.name = ''
         self.description = ''
         self.service = service
@@ -264,6 +313,20 @@ class Query(object):
         self._logic_parser = constraints.LogicParser(self)
         self._logic = None
         self.constraint_factory = constraints.ConstraintFactory()
+
+        # Set up sugary aliases
+        self.c = self.column
+        self.filter = self.where
+        self.add_column = self.add_view
+        self.add_columns = self.add_view
+        self.add_views = self.add_view
+        self.select = self.add_view
+        self.order_by = self.add_sort_order
+        self.all = self.get_results_list
+        self.rows = self.results
+
+    def __iter__(self):
+        return self.results("jsonobjects")
 
     @classmethod
     def from_xml(cls, xml, *args, **kwargs):
@@ -393,10 +456,45 @@ class Query(object):
         for p in paths:
             if isinstance(p, (set, list)):
                 views.extend(list(p))
+            elif isinstance(p, Class):
+                views.append(p.name + ".*")
+            elif isinstance(p, Column):
+                if p._path.is_attribute():
+                    views.append(str(p))
+                else:
+                    views.append(str(p) + ".*")
             else:
                 views.extend(re.split("(?:,?\s+|,)", p))
-        if self.do_verification: self.verify_views(views)
-        self.views.extend(views)
+
+        views = map(self.prefix_path, views)
+
+        views_to_add = []
+        for view in views:
+            if view.endswith(".*"):
+                view = re.sub("\.\*$", "", view)
+                path = self.model.make_path(view, self.get_subclass_dict())
+                cd = path.end_class
+                attr_views = map(lambda x: view + "." + x.name, cd.attributes)
+                views_to_add.extend(attr_views)
+            else:
+                views_to_add.append(view)
+
+        if self.do_verification: 
+            self.verify_views(views_to_add)
+
+        self.views.extend(views_to_add)
+            
+        return self
+    
+    def prefix_path(self, path):
+        if self.root is None:
+            self.root = self.model.make_path(path, self.get_subclass_dict()).root
+            return path
+        else:
+            if path.startswith(self.root.name):
+                return path
+            else: 
+                return self.root.name + "." + path
 
     def clear_view(self):
         """
@@ -453,7 +551,15 @@ class Query(object):
 
         @rtype: L{intermine.constraints.Constraint}
         """
-        con = self.constraint_factory.make_constraint(*args, **kwargs)
+        if len(args) == 1 and len(kwargs) == 0:
+            if isinstance(args[0], tuple):
+                con = self.constraint_factory.make_constraint(*args[0])
+            else:
+                con = args[0]
+        else:
+            con = self.constraint_factory.make_constraint(*args, **kwargs)
+
+        con.path = self.prefix_path(con.path)
         if self.do_verification: self.verify_constraint_paths([con])
         if hasattr(con, "code"): 
             self.constraint_dict[con.code] = con
@@ -461,6 +567,23 @@ class Query(object):
             self.uncoded_constraints.append(con)
         
         return con
+
+    def where(self, *args, **kwargs):
+        """
+        Add a constraint to the query
+        =============================
+
+        In contrast to add_constraint, this method also adds all attributes to the query 
+        if no view has been set, and returns self to support method chaining.
+        """
+        if len(self.views) == 0:
+            self.add_view(self.root)
+
+        self.add_constraint(*args, **kwargs)
+        return self
+
+    def column(self, string):
+        return self.model.column(self.prefix_path(string), self.model, self.get_subclass_dict(), self)
 
     def verify_constraint_paths(self, cons=None):
         """
@@ -584,9 +707,14 @@ class Query(object):
         @rtype: L{intermine.pathfeatures.Join}
         """
         join = Join(*args, **kwargs)
+        join.path = self.prefix_path(join.path)
         if self.do_verification: self.verify_join_paths([join])
         self.joins.append(join)
-        return join
+        return self
+
+    def outerjoin(self, column):
+        """Alias for add_join(column, "OUTER")"""
+        return self.add_join(str(column), "OUTER")
 
     def verify_join_paths(self, joins=None):
         """
@@ -622,6 +750,7 @@ class Query(object):
 
         """
         path_description = PathDescription(*args, **kwargs)
+        path_description.path = self.prefix_path(path_description.path)
         if self.do_verification: self.verify_pd_paths([path_description])
         self.path_descriptions.append(path_description)
         return path_description
@@ -696,6 +825,7 @@ class Query(object):
             logic = self._logic_parser.parse(value)
         if self.do_verification: self.validate_logic(logic)
         self._logic = logic
+        return self
 
     def validate_logic(self, logic=None):
         """
@@ -772,9 +902,11 @@ class Query(object):
         This method will try to validate the sort order
         by calling validate_sort_order()
         """
-        so = SortOrder(path, direction)
+        so = SortOrder(str(path), direction)
+        so.path = self.prefix_path(so.path)
         if self.do_verification: self.validate_sort_order(so)
         self._sort_order_list.append(so)
+        return self
 
     def validate_sort_order(self, *so_elems):
         """
@@ -822,7 +954,7 @@ class Query(object):
                 subclass_dict[c.path] = c.subclass
         return subclass_dict
 
-    def results(self, row="list", start=0, size=None):
+    def results(self, row="rr", start=0, size=None):
         """
         Return an iterator over result rows
         ===================================
@@ -832,8 +964,8 @@ class Query(object):
           for row in query.results():
             do_sth_with(row)
         
-        @param row: the format for the row. Defaults to "list". Valid options are 
-            "dict", "list", "jsonrows", "jsonobject", "tsv", "csv". 
+        @param row: the format for the row. Defaults to "rr". Valid options are 
+            "rr", "dict", "list", "jsonrows", "jsonobject", "tsv", "csv". 
         @type row: string
 
         @rtype: L{intermine.webservice.ResultIterator}
@@ -846,7 +978,24 @@ class Query(object):
         if size:
             params["size"] = size
         view = self.views
-        return self.service.get_results(path, params, row, view)
+        cld = self.root
+        return self.service.get_results(path, params, row, view, cld)
+
+    def one(self, row="rr"):
+        """Return one result, and raise an error if the result size is not 1"""
+        c = self.count()
+        if (c != 1):
+            raise "Result size is not one: got " + str(c) + " results"
+        else:
+            return self.first(row)
+
+    def first(self, row="rr", start=0):
+        """Return the first result, or None if the results are empty"""
+        size = None if row == "jsonobjects" else 1
+        try:
+            return self.results(row, start=start, size=size).next()
+        except StopIteration:
+            return None
 
     def get_results_list(self, *args, **kwargs):
         """
@@ -863,6 +1012,8 @@ class Query(object):
         list in one place.
 
         It takes all the same arguments and parameters as Query.results
+
+        aliased as 'all'
 
         @see: L{intermine.query.results}
 
@@ -1056,7 +1207,7 @@ class Query(object):
         for attr in ["joins", "views", "_sort_order_list", "_logic", "path_descriptions", "constraint_dict"]:
             setattr(newobj, attr, deepcopy(getattr(self, attr)))
 
-        for attr in ["name", "description", "service", "do_verification", "constraint_factory"]:
+        for attr in ["name", "description", "service", "do_verification", "constraint_factory", "root"]:
             setattr(newobj, attr, getattr(self, attr))
         return newobj
 
@@ -1205,7 +1356,7 @@ class Template(Query):
                 setattr(con, key, value)
         return clone
 
-    def results(self, row="list", start=0, size=None, **con_values):
+    def results(self, row="rr", start=0, size=None, **con_values):
         """
         Get an iterator over result rows
         ================================
@@ -1235,7 +1386,7 @@ class Template(Query):
         clone = self.get_adjusted_template(con_values)
         return super(Template, clone).results(row, start, size)
 
-    def get_results_list(self, row="list", start=0, size=None, **con_values):
+    def get_results_list(self, row="rr", start=0, size=None, **con_values):
         """
         Get a list of result rows
         =========================

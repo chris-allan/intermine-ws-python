@@ -30,7 +30,7 @@ class TestCommand(Command):
 
     def run(self):
         '''
-        Finds all the tests modules in tests/, and runs them.
+        Finds all the tests modules in tests/, and runs them, exiting after they are all done
         '''
 
         log.set_verbosity(self.verbose)
@@ -43,17 +43,17 @@ class TestCommand(Command):
         time.sleep(1)
 
         testfiles = [ ]
-        for t in glob(pjoin(self._dir, 'tests', '*.py')):
+        for t in glob(pjoin(self._dir, 'tests', 'test*.py')):
             if not t.endswith('__init__.py'):
                 testfiles.append('.'.join(
                     ['tests', splitext(basename(t))[0]])
                 )
-        testfiles = [ "tests.test" ]
 
         self.announce("Test files:" + str(testfiles), level=2)
         tests = TestLoader().loadTestsFromNames(testfiles)
         t = TextTestRunner(verbosity = self.verbose)
         t.run(tests)
+        exit()
 
 class CleanCommand(Command):
     """
@@ -119,7 +119,7 @@ setup(
         name = "intermine",
         packages = ["intermine"],
         cmdclass = { 'test': TestCommand, 'clean': CleanCommand },
-        version = "0.97.00",
+        version = "0.98.02",
         description = "InterMine WebService client",
         author = "Alex Kalderimis",
         author_email = "dev@intermine.org",

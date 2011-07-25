@@ -5,6 +5,7 @@ from urlparse import urlparse
 import csv
 import base64
 import httplib
+import re
 
 # Use core json for 2.6+, simplejson for <=2.5
 try:
@@ -14,9 +15,9 @@ except ImportError:
 
 # Local intermine imports
 from .query import Query, Template
-from .model import Model
+from .model import Model, Attribute, Reference, Collection
 from .util import ReadableException
-from .lists import ListManager
+from .lists.listmanager import ListManager
 
 """
 Webservice Interaction Routines for InterMine Webservices
@@ -61,12 +62,23 @@ class Service(object):
       for row in query.results():
         do_something_with(row)
         ...
+
+      new_list = service.create_list("some/file/with.ids", "Gene")
+      list_on_server = service.get_list("On server")
+      in_both = new_list & list_on_server
+      in_both.name = "Intersection of these lists"
+      for row in in_both.to_attribute_query().results():
+        do_something_with(row)
+        ...
       
     OVERVIEW
     --------
     The two methods the user will be most concerned with are:
       - L{Service.new_query}: constructs a new query to query a service with
       - L{Service.get_template}: gets a template from the service
+      - L{ListManager.create_list}: creates a new list on the service
+
+    For list management information, see L{ListManager}.
 
     TERMINOLOGY
     -----------
@@ -81,6 +93,9 @@ class Service(object):
     values of the constraints that exist on the template. Templates are accessed
     by name, and while you can easily introspect templates, it is assumed
     you know what they do when you use them
+
+    X{List} is a saved result set containing a set of objects previously identified
+    in the database. Lists can be created and managed using this client library.
 
     @see: L{intermine.query}
     """
@@ -100,22 +115,43 @@ class Service(object):
     RELEASE_PATH           = '/version/release'
     SCHEME                 = 'http://'
 
-    def __init__(self, root, username=None, password=None):
+    def __init__(self, root, username=None, password=None, token=None):
         """
         Constructor
         ===========
 
         Construct a connection to a webservice::
 
-            service = Service("http://www.flymine.org/query/service")
+            url = "http://www.flymine.org/query/service"
+
+            # An unauthenticated connection - access to all public data
+            service = Service(url)
+
+            # An authenticated connection - access to private and public data
+            service = Service(url, token="ABC123456")
+
 
         @param root: the root url of the webservice (required)
         @param username: your login name (optional)
         @param password: your password (required if a username is given)
+        @param token: your API access token(optional - used in preference to username and password)
 
         @raise ServiceError: if the version cannot be fetched and parsed
         @raise ValueError:   if a username is supplied, but no password
+
+        There are two alternative authentication systems supported by InterMine
+        webservices. The first is username and password authentication, which
+        is supported by all webservices. Newer webservices (version 6+)
+        also support API access token authentication, which is the recommended 
+        system to use. Token access is more secure as you will never have 
+        to transmit your username or password, and the token can be easily changed
+        or disabled without changing your webapp login details.
+
         """
+        o = urlparse(root)
+        if not o.scheme: root = "http://" + root
+        if not root.endswith("/service"): root = root + "/service"
+
         self.root = root
         self._templates = None
         self._model = None
@@ -123,36 +159,44 @@ class Service(object):
         self._release = None
         self._list_manager = ListManager(self)
         self.__missing_method_name = None
-        if username:
+        if token:
+            self.opener = InterMineURLOpener(token=token)
+        elif username:
+            if token:
+                raise ValueError("Both username and token credentials supplied")
+
             if not password:
                 raise ValueError("Username given, but no password supplied")
+
             self.opener = InterMineURLOpener((username, password))
         else:
             self.opener = InterMineURLOpener()
 
-# This works in the real world, but not in testing...
-#       try:
-#           self.version
-#       except ServiceError:
-#           raise ServiceError("Could not validate service - is the root url correct?")
+        try:
+            self.version
+        except WebserviceError, e:
+            raise ServiceError("Could not validate service - is the root url correct? " + str(e))
+
+        if token and self.version < 6:
+            raise ServiceError("This service does not support API access token authentication")
+
+        # Set up sugary aliases
+        self.query = self.new_query
+
 
     # Delegated list methods
 
     LIST_MANAGER_METHODS = frozenset(["get_list", "get_all_lists", "get_all_list_names",
-        "create_list", "get_list_count", "delete_lists"])
+        "create_list", "get_list_count", "delete_lists", "l"])
 
     def __getattribute__(self, name):
         return object.__getattribute__(self, name)
     
     def __getattr__(self, name):
-        self.__missing_method_name = name # Could also be a property
-        return getattr(self, '__methodmissing__')
-
-    def __methodmissing__(self, *args, **kwargs):
-        if self.__missing_method_name in self.LIST_MANAGER_METHODS:
-            method = getattr(self._list_manager, self.__missing_method_name)
-        self.__missing_method_name = None
-        return method(*args, **kwargs)
+        if name in self.LIST_MANAGER_METHODS:
+            method = getattr(self._list_manager, name)
+            return method
+        raise AttributeError("Could not find " + name)
 
     def __del__(self):
         try: 
@@ -178,8 +222,8 @@ class Service(object):
             try:
                 url = self.root + self.VERSION_PATH
                 self._version = int(self.opener.open(url).read())
-            except ValueError:
-                raise ServiceError("Could not parse a valid webservice version")
+            except ValueError, e:
+                raise ServiceError("Could not parse a valid webservice version: " + str(e))
         return self._version
     @property
     def release(self):
@@ -199,10 +243,10 @@ class Service(object):
         @rtype: string
         """
         if self._release is None:
-            self._release = urllib.urlopen(self.root + RELEASE_PATH).read()
+            self._release = urllib.urlopen(self.root + self.RELEASE_PATH).read()
         return self._release
 
-    def new_query(self):
+    def new_query(self, root=None):
         """
         Construct a new Query object for the given webservice
         =====================================================
@@ -214,7 +258,7 @@ class Service(object):
 
         @return: L{intermine.query.Query}
         """
-        return Query(self.model, self)
+        return Query(self.model, self, root=root)
 
     def get_template(self, name):
         """
@@ -301,10 +345,10 @@ class Service(object):
         """
         if self._model is None:
             model_url = self.root + self.MODEL_PATH
-            self._model = Model(model_url)
+            self._model = Model(model_url, self)
         return self._model
 
-    def get_results(self, path, params, rowformat, view):
+    def get_results(self, path, params, rowformat, view, cld=None):
         """
         Return an Iterator over the rows of the results
         ===============================================
@@ -317,7 +361,7 @@ class Service(object):
         @type path: string
         @param params: The query parameters for this request as a dictionary
         @type params: dict
-        @param rowformat: One of "dict", "list", "tsv", "csv", "jsonrows", "jsonobjects"
+        @param rowformat: One of "rr", "dict", "list", "tsv", "csv", "jsonrows", "jsonobjects"
         @type rowformat: string
         @param view: The output columns
         @type view: list
@@ -326,16 +370,130 @@ class Service(object):
 
         @return: L{intermine.webservice.ResultIterator}
         """
-        return ResultIterator(self.root, path, params, rowformat, view, self.opener)
+        return ResultIterator(self.root, path, params, rowformat, view, self.opener, cld)
+
+class ResultObject(object):
+    """
+    An object used to represent result records as returned in jsonobjects format
+    ============================================================================
+
+    These objects are backed by a row of data and the class descriptor that
+    describes the object. They allow access in standard object style:
+
+        for gene in query.results():
+            print gene.symbol
+            print map(lambda x: x.name, gene.pathways)
+
+    """
+    
+    def __init__(self, data, cld):
+        self._data = data
+        self._cld = cld
+        self._attr_cache = {}
+
+    def __getattr__(self, name):
+        if name in self._attr_cache:
+            return self._attr_cache[name]
+
+        fld = self._cld.get_field(name)
+        attr = None
+        if isinstance(fld, Attribute):
+            if name in self._data:
+                attr = self._data[name]
+        elif isinstance(fld, Collection):
+            if name in self._data:
+                attr = map(lambda x: ResultObject(x, fld.type_class), self._data[name])
+            else:
+                attr = []
+        elif isinstance(fld, Reference):
+            if name in self._data:
+                attr = ResultObject(self._data[name], fld.type_class)
+        else:
+            raise WebserviceError("Inconsistent model - This should never happen")
+        self._attr_cache[name] = attr
+        return attr
+            
+
+class ResultRow(object):
+    """
+    An object for representing a row of data received back from the server.
+    =======================================================================
+
+    ResultRows provide access to the fields of the row through index lookup. However, 
+    for convenience both list indexes and dictionary keys can be used. So the 
+    following all work:
+
+       # view is "Gene.symbol", "Gene.organism.name"
+       row["symbol"]
+       row["Gene.symbol"]
+       row[0]
+       row[:1]
+
+    """
+
+    def __init__(self, data, views):
+        self.data = data
+        self.views = views
+        self.index_map = None
+
+    def __len__(self):
+        """Return the number of cells in this row"""
+        return len(self.data)
+
+    def __iter__(self):
+        """Return the list view of the row, so each cell can be processed"""
+        return self.to_l()
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.data[key]["value"]
+        elif isinstance(key, slice):
+            vals = map(lambda x: x["value"], self.data[key])
+            return vals
+        else:
+            index = self._get_index_for(key)
+            return self.data[index]["value"]
+
+    def _get_index_for(self, key):
+        if self.index_map is None:
+            self.index_map = {}
+            for i in range(len(self.views)):
+                view = self.views[i]
+                headless_view = re.sub("^[^.]+.", "", view)
+                self.index_map[view] = i
+                self.index_map[headless_view] = i
+
+        return self.index_map[key]
+
+    def __str__(self):
+       root = re.sub("\..*$", "", self.views[0])
+       parts = [root + ":"]
+       for view in self.views:
+           short_form = re.sub("^[^.]+.", "", view)
+           value = self[view]
+           parts.append(short_form + "=" + str(value))
+       return " ".join(parts)
+
+    def to_l(self):
+       """Return a list view of this row"""
+       return map(lambda x: x["value"], self.data)
+
+    def to_d(self):
+       """Return a dictionary view of this row"""
+       d = {}
+       for view in self.views:
+           d[view] = self[view]
+
+       return d
 
 class ResultIterator(object):
     
-    PARSED_FORMATS = frozenset(["list", "dict"])
+    PARSED_FORMATS = frozenset(["rr", "list", "dict"])
     STRING_FORMATS = frozenset(["tsv", "csv", "count"])
     JSON_FORMATS = frozenset(["jsonrows", "jsonobjects"])
     ROW_FORMATS = PARSED_FORMATS | STRING_FORMATS | JSON_FORMATS
 
-    def __init__(self, root, path, params, rowformat, view, opener):
+    def __init__(self, root, path, params, rowformat, view, opener, cld=None):
         """
         Constructor
         ===========
@@ -375,8 +533,9 @@ class ResultIterator(object):
             "csv"         : lambda: FlatFileIterator(con, EchoParser()),
             "count"       : lambda: FlatFileIterator(con, EchoParser()),
             "list"        : lambda: JSONIterator(con, ListValueParser()),
+            "rr"          : lambda: JSONIterator(con, ResultRowParser(view)),
             "dict"        : lambda: JSONIterator(con, DictValueParser(view)),
-            "jsonobjects" : lambda: JSONIterator(con, EchoParser()),
+            "jsonobjects" : lambda: JSONIterator(con, ResultObjParser(cld)),
             "jsonrows"    : lambda: JSONIterator(con, EchoParser())
         }.get(rowformat)()
 
@@ -501,8 +660,12 @@ class JSONIterator(object):
                 self.check_return_status()
             else:
                 line = line.strip().strip(',')
-                row = json.loads(line)
-                next_row = self.parser.parse(row)
+                if len(line)> 0:
+                    try:
+                        row = json.loads(line)
+                    except json.decoder.JSONDecodeError, e:
+                        raise WebserviceError("Error parsing line from results: '" + line + "' - " + str(e)) 
+                    next_row = self.parser.parse(row)
         except StopIteration:
             raise WebserviceError("Connection interrupted")
 
@@ -564,6 +727,7 @@ class ListValueParser(Parser):
     of values.
     """
 
+
     def parse(self, row):
         """
         Parse a row of JSON results into a list
@@ -600,6 +764,62 @@ class DictValueParser(Parser):
             return_dict[view] = cell.get("value")
         return return_dict
 
+class ResultRowParser(Parser):
+    """
+    A result parser that produces ResultRow objects, which support both index and key access
+    ========================================================================================
+
+    Parses jsonrow formatted rows into ResultRows,
+    which supports key access by list indices (based on the 
+    selected view) as well as lookup by view name (based 
+    on the selected view value).
+    """
+
+    def parse(self, row):
+        """
+        Parse a row of JSON results into a ResultRow
+        
+        @param row: a row of data from a result set
+        @type row: a JSON string
+
+        @rtype: ResultRow
+        """
+        rr = ResultRow(row, self.view)
+        return rr
+
+class ResultObjParser(Parser):
+    """
+    A result parser that produces ResultRow objects, which support both index and key access
+    ========================================================================================
+
+    Parses jsonrow formatted rows into ResultRows,
+    which supports key access by list indices (based on the 
+    selected view) as well as lookup by view name (based 
+    on the selected view value).
+    """
+
+    def __init__(self, cld):
+        """
+        Constructor
+        ===========
+
+        @param cld: the class of object this result object represents
+        @type cld: intermine.model.Class
+        """
+        self.cld = cld
+
+    def parse(self, row):
+        """
+        Parse a row of JSON results into a ResultRow
+        
+        @param row: a row of data from a result set
+        @type row: a JSON string
+
+        @rtype: ResultObject
+        """
+        ro = ResultObject(row, self.cld)
+        return ro
+
 class InterMineURLOpener(urllib.FancyURLopener):
     """
     Specific implementation of urllib.FancyURLOpener for this client
@@ -609,7 +829,7 @@ class InterMineURLOpener(urllib.FancyURLopener):
     """
     version = "InterMine-Python-Client-0.96.00"
 
-    def __init__(self, credentials=None):
+    def __init__(self, credentials=None, token=None):
         """
         Constructor
         ===========
@@ -619,6 +839,7 @@ class InterMineURLOpener(urllib.FancyURLopener):
         Return a new url-opener with the appropriate credentials
         """
         urllib.FancyURLopener.__init__(self)
+        self.token = token
         self.plain_post_header = {
             "Content-Type": "text/plain; charset=utf-8",
             "UserAgent": Service.USER_AGENT
@@ -632,6 +853,7 @@ class InterMineURLOpener(urllib.FancyURLopener):
             self.using_authentication = False
 
     def post_plain_text(self, url, body):
+        url = self.prepare_url(url)
         o = urlparse(url)
         con = httplib.HTTPConnection(o.hostname, o.port)
         con.request('POST', url, body, self.plain_post_header)
@@ -642,7 +864,23 @@ class InterMineURLOpener(urllib.FancyURLopener):
             raise WebserviceError(resp.status, resp.reason, content)
         return content
 
+    def open(self, url, data=None):
+        url = self.prepare_url(url)
+        return urllib.FancyURLopener.open(self, url, data) 
+
+    def prepare_url(self, url):
+        if self.token:
+            token_param = "token=" + self.token
+            o = urlparse(url)
+            if o.query:
+                url += "&" + token_param
+            else:
+                url += "?" + token_param
+
+        return url
+
     def delete(self, url):
+        url = self.prepare_url(url)
         o = urlparse(url)
         con = httplib.HTTPConnection(o.hostname, o.port)
         con.request('DELETE', url, None, self.plain_post_header)
